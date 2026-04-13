@@ -14,7 +14,7 @@ routing, typed Pydantic outputs, inline ephemeral UI components, and persistent
 conversation state — while explicitly deferring Content, Outreach, Feedback, and
 intelligence accumulation.
 
-**Technical approach:** A Next.js 15 App Router frontend renders chat + a
+**Technical approach:** A Next.js 16 App Router frontend renders chat + a
 `<IntelligenceBrief />` ephemeral component driven by typed SSE events. A FastAPI
 backend exposes `POST /api/v1/chat/stream` which runs a LangGraph graph
 (Supervisor → Research) with a Postgres checkpointer. The Research agent uses
@@ -31,7 +31,7 @@ Observability via LangSmith from day one.
 - Frontend: TypeScript 5.x (Node 20 LTS)
 
 **Primary Dependencies**:
-- Frontend: Next.js 15 (App Router), React 19, Tailwind CSS 4, Shadcn/ui,
+- Frontend: Next.js 16 (App Router), React 19, Tailwind CSS 4, Shadcn/ui,
   Zustand, BetterAuth, native `EventSource`
 - Backend: FastAPI, LangGraph, LangChain (`langchain-openai`,
   `langchain-anthropic`), Pydantic v2, Prisma (`prisma-client-py`), Motor (async
@@ -125,7 +125,7 @@ specs/001-research-agent/
 ```text
 amplify/
 ├── apps/
-│   ├── web/                              # Next.js 15 App Router
+│   ├── web/                              # Next.js 16 App Router
 │   │   ├── app/
 │   │   │   ├── (auth)/
 │   │   │   │   ├── login/page.tsx
@@ -207,7 +207,7 @@ amplify/
 └── README.md
 ```
 
-**Structure Decision**: Web application monorepo with `apps/web` (Next.js 15)
+**Structure Decision**: Web application monorepo with `apps/web` (Next.js 16)
 and `apps/api` (FastAPI), matching ADR-001 and SAD §4. No `packages/` workspace
 tooling per ADR-001. Shared SSE event types are generated from Pydantic models
 into `apps/web/lib/types/sse-events.ts` at build time to keep the contract in

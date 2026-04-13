@@ -1,9 +1,9 @@
 # Solution Architecture Document: Amplify
 
-**Version:** 1.1
-**Date:** April 12, 2026
+**Version:** 1.2
+**Date:** April 13, 2026
 **Author:** Gayashan
-**Status:** Draft — Revised (auth scoped to Next.js, MongoDB confirmed)
+**Status:** Draft — Revised (Next.js upgraded to 16 for CVE-2025-66478)
 
 ---
 
@@ -196,7 +196,7 @@ amplify/
 
 | Concern | Choice | Rationale |
 |---|---|---|
-| Framework | Next.js 15 (App Router) | SSR for initial load, Server Actions for mutations, streaming support |
+| Framework | Next.js 16 (App Router) | SSR for initial load, Server Actions for mutations, streaming support. Upgraded from 15.x for CVE-2025-66478. |
 | Styling | Tailwind CSS 4 | Utility-first, pairs with Shadcn |
 | Components | Shadcn/ui | Accessible, composable, no vendor lock-in |
 | State | Zustand | Lightweight, works with SSR, good for chat state |

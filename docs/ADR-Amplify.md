@@ -1,7 +1,7 @@
 # Architecture Decision Records: Amplify
 
-**Version:** 1.0
-**Date:** April 12, 2026
+**Version:** 1.1
+**Date:** April 13, 2026
 **Author:** Gayashan
 **Status:** Active
 
@@ -679,6 +679,45 @@ None. Production services on Railway are unaffected. Docker was never part of th
 
 ---
 
+## ADR-019: Next.js Pinned to 16.x (Security Upgrade from 15.x)
+
+**Status:** Accepted
+**Date:** April 13, 2026
+
+### Context
+
+Shortly after the initial scaffolding on Next.js 15.1.0, pnpm surfaced a deprecation warning pointing at **CVE-2025-66478**: the installed 15.1.0 release has a security vulnerability and must be upgraded to a patched version. At the same time, 16.x had become the current stable `latest` tag on npm.
+
+### Options Considered
+
+1. **Upgrade to the latest 15.x patch** (e.g., 15.5.x from the `backport` dist-tag) — stays on the same major line.
+2. **Upgrade to the latest 16.x stable** — jumps one major version.
+3. **Stay on 15.1.0** — not viable; known CVE.
+
+### Decision
+
+Option 2 — pin Next.js to **16.2.3** (current stable `latest`) and upgrade `eslint-config-next` to the matching version.
+
+### Rationale
+
+- 16.x is the actively maintained line and receives security patches first. Staying on 15.x trades one known CVE for the ongoing risk of the next one landing on a line that will soon be in maintenance-only mode.
+- The project is in Phase 1 scaffolding; there is essentially no Next.js-specific code to break (only `layout.tsx`, `page.tsx`, `globals.css`, and config files). The cost of a major-version jump is lowest right now and only grows from here.
+- React 19 remains supported, so `react`/`react-dom` do not need to change.
+- `eslint-config-next` is upgraded in lockstep to avoid lint drift against framework internals.
+
+### Consequences
+
+- **Positive:** CVE-2025-66478 resolved. On the line that will get the next batch of patches first.
+- **Positive:** Upgrade cost was effectively zero because this happened before any feature code was written against Next 15.
+- **Negative:** Minor behavioural differences between 15 and 16 (App Router defaults, caching semantics) may surface later when real features are built; mitigated by re-reading the Next 16 release notes when starting Phase 3.
+- **Negative:** `pnpm-lock.yaml` must be regenerated (`pnpm install`) after the `package.json` change.
+
+### Revisit Trigger
+
+If the Next.js 16 line introduces breaking changes that materially affect our Server Actions + SSE streaming pattern, reassess; otherwise track patch releases as they arrive.
+
+---
+
 ## Summary Table
 
 | ADR | Decision | Status |
@@ -701,6 +740,7 @@ None. Production services on Railway are unaffected. Docker was never part of th
 | ADR-016 | pnpm for Node.js package management | Accepted |
 | ADR-017 | uv for Python package management | Accepted |
 | ADR-018 | No Docker — cloud free tiers for local dev | Accepted |
+| ADR-019 | Next.js pinned to 16.x (CVE-2025-66478 upgrade) | Accepted |
 
 ---
 

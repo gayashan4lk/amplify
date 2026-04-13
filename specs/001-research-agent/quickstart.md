@@ -16,7 +16,10 @@ and see a rendered intelligence brief.
 - Python 3.12 (`python3.12 --version`)
 - `uv` for Python package management (`uv --version`)
 - `pnpm` for Node package management
-- Docker (for local Postgres, Mongo, Redis)
+- Cloud accounts (free tiers — see ADR-018):
+  - Neon Postgres (https://neon.tech)
+  - MongoDB Atlas M0 (https://cloud.mongodb.com)
+  - Upstash Redis (https://upstash.com)
 - API keys:
   - `OPENAI_API_KEY` (GPT-4o)
   - `ANTHROPIC_API_KEY` (Claude Sonnet)
@@ -25,33 +28,33 @@ and see a rendered intelligence brief.
 
 ---
 
-## 1. Bring up local infrastructure
+## 1. Provision cloud services (free tiers)
 
-```bash
-docker compose up -d postgres mongodb redis
-```
+Per ADR-018, local dev uses managed cloud free tiers — no Docker.
 
-`docker-compose.yml` (to be added in this slice) exposes:
-- Postgres on `localhost:5432` (db `amplify_dev`)
-- MongoDB on `localhost:27017` (db `amplify_dev`)
-- Redis on `localhost:6379`
+1. **Neon Postgres** — create a project, create a `amplify_dev` database (or
+   a dev branch), copy the pooled connection string.
+2. **MongoDB Atlas** — create an M0 cluster, create a DB user, allow your IP,
+   copy the SRV connection string.
+3. **Upstash Redis** — create a database (TLS), copy the `rediss://` URL.
 
 ---
 
 ## 2. Configure environment
 
-Copy `.env.example` to `.env.local` at the repo root and fill in:
+Copy `.env.example` to `.env.local` at the repo root and fill in the cloud
+URLs and keys:
 
 ```
-# Neon / Postgres (local)
-DATABASE_URL=postgresql://amplify:amplify@localhost:5432/amplify_dev
+# Neon Postgres
+DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx.region.aws.neon.tech/amplify_dev?sslmode=require
 
-# MongoDB
-MONGODB_URI=mongodb://localhost:27017
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster0.xxx.mongodb.net/?retryWrites=true&w=majority
 MONGODB_DB=amplify_dev
 
-# Redis
-REDIS_URL=redis://localhost:6379
+# Upstash Redis
+REDIS_URL=rediss://default:PASSWORD@xxx.upstash.io:6379
 
 # LLMs
 OPENAI_API_KEY=sk-…

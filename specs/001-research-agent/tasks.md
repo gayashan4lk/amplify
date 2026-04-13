@@ -24,15 +24,14 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 **Purpose**: Stand up the monorepo skeleton, local infrastructure, and toolchains so every later phase has a working build.
 
-- [ ] T001 Create monorepo directory structure per plan.md §Project Structure: `apps/web/`, `apps/api/`, top-level `docker-compose.yml`, `.env.example`, `railway.toml` stub, `README.md` pointing to `specs/001-research-agent/quickstart.md`
+- [ ] T001 Create monorepo directory structure per plan.md §Project Structure: `apps/web/`, `apps/api/`, top-level `.env.example`, `railway.toml` stub, `README.md` pointing to `specs/001-research-agent/quickstart.md`
 - [ ] T002 [P] Initialize FastAPI project at `apps/api/` with `pyproject.toml` (Python 3.12) and `uv.lock`; dependencies: `fastapi`, `uvicorn[standard]`, `langgraph`, `langchain-openai`, `langchain-anthropic`, `pydantic>=2`, `prisma`, `motor`, `arq`, `tavily-python`, `httpx`, `langsmith`, `redis`; dev deps: `pytest`, `pytest-asyncio`, `respx`, `ruff`
-- [ ] T003 [P] Initialize Next.js 15 project at `apps/web/` with `pnpm`, TypeScript 5.x, Tailwind CSS 4, Shadcn/ui, Zustand, BetterAuth, Vitest, Playwright; App Router enabled
-- [ ] T004 [P] Add `docker-compose.yml` at repo root with services: `postgres` (15+), `mongodb` (7+), `redis` (7+) — bound to localhost ports per quickstart.md
-- [ ] T005 [P] Write `.env.example` at repo root with all keys listed in quickstart.md §2 (DATABASE_URL, MONGODB_URI, REDIS_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, TAVILY_API_KEY, LANGSMITH_API_KEY, LANGSMITH_PROJECT, FASTAPI_INTERNAL_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL)
-- [ ] T006 [P] Configure Ruff for `apps/api/` and ESLint/Prettier for `apps/web/`; add `format` and `lint` scripts in each app
-- [ ] T007 [P] Add GitHub Actions CI workflow at `.github/workflows/ci.yml`: runs backend `pytest`, frontend `vitest`, lint, and type checks; uses fixtures not live APIs
+- [ ] T003 [P] Initialize Next.js 16 project at `apps/web/` with `pnpm`, TypeScript 5.x, Tailwind CSS 4, Shadcn/ui, Zustand, BetterAuth, Vitest, Playwright; App Router enabled
+- [ ] T004 [P] Write `.env.example` at repo root with cloud-free-tier URLs (Neon, MongoDB Atlas, Upstash) and all keys listed in quickstart.md §2 (DATABASE_URL, MONGODB_URI, REDIS_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, TAVILY_API_KEY, LANGSMITH_API_KEY, LANGSMITH_PROJECT, FASTAPI_INTERNAL_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL)
+- [ ] T005 [P] Configure Ruff for `apps/api/` and ESLint/Prettier for `apps/web/`; add `format` and `lint` scripts in each app
+- [ ] T006 [P] Add GitHub Actions CI workflow at `.github/workflows/ci.yml`: runs backend `pytest`, frontend `vitest`, lint, and type checks; uses fixtures not live APIs
 
-**Checkpoint**: `docker compose up -d`, `uv run uvicorn main:app`, and `pnpm dev` all start cleanly; CI passes on an empty project.
+**Checkpoint**: `uv run uvicorn main:app` and `pnpm dev` both start cleanly against the cloud-provisioned dev databases; CI passes on an empty project.
 
 ---
 
@@ -76,7 +75,7 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 ### FastAPI app wiring
 
 - [ ] T026 Create `apps/api/main.py`: FastAPI app, CORS for private network only, mounts `middleware/auth.py`, imports routers (stubs for now), startup/shutdown lifecycle for Prisma client, Motor client, Redis pool
-- [ ] T027 [P] Create `apps/api/config.py`: Pydantic `Settings` class loading all env vars from T005; exposes `RESEARCH_BUDGET_QUERIES=8`, `RESEARCH_BUDGET_SECONDS=60`, `TAVILY_CACHE_TTL_SECONDS=300`, `USER_RESEARCH_RATE_LIMIT_PER_HOUR=10`
+- [ ] T027 [P] Create `apps/api/config.py`: Pydantic `Settings` class loading all env vars from T004; exposes `RESEARCH_BUDGET_QUERIES=8`, `RESEARCH_BUDGET_SECONDS=60`, `TAVILY_CACHE_TTL_SECONDS=300`, `USER_RESEARCH_RATE_LIMIT_PER_HOUR=10`
 
 ### Contract tests (foundational — run in CI against the above scaffolding)
 
@@ -243,7 +242,7 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 ## Parallel execution opportunities
 
-**Within Phase 1**: T002, T003, T004, T005, T006, T007 can all run in parallel after T001.
+**Within Phase 1**: T002, T003, T004, T005, T006 can all run in parallel after T001.
 
 **Within Phase 2**:
 - Pydantic model files T012, T013, T014, T015 → all in parallel.
