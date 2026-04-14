@@ -153,27 +153,27 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 ### Backend: Conversation list and detail endpoints
 
-- [ ] T058 [US2] Implement `apps/api/routers/conversations.py::GET /api/v1/conversations` per contracts/rest-endpoints.md: cursor paginated, sorted by `updatedAt desc`, filtered by `request.state.user_id`; derives `latest_status` from the last message's state
-- [ ] T059 [US2] Implement `apps/api/routers/conversations.py::GET /api/v1/conversations/{id}`: returns all messages in order; for every `assistant` message with `briefId`, resolves the full brief via `brief_store.get(brief_id, user_id)` and embeds it; for messages with `failureRecordId`, embeds the failure record
-- [ ] T060 [P] [US2] Implement `apps/api/routers/conversations.py::DELETE /api/v1/conversations/{id}` (soft delete) setting `archivedAt`; excludes archived rows from the list query
-- [ ] T061 [US2] Derive and persist `Conversation.title` from the first user message in `routers/chat.py` (truncate to 140 chars); update `updatedAt` on every new message
+- [X] T058 [US2] Implement `apps/api/routers/conversations.py::GET /api/v1/conversations` per contracts/rest-endpoints.md: cursor paginated, sorted by `updatedAt desc`, filtered by `request.state.user_id`; derives `latest_status` from the last message's state
+- [X] T059 [US2] Implement `apps/api/routers/conversations.py::GET /api/v1/conversations/{id}`: returns all messages in order; for every `assistant` message with `briefId`, resolves the full brief via `brief_store.get(brief_id, user_id)` and embeds it; for messages with `failureRecordId`, embeds the failure record
+- [X] T060 [P] [US2] Implement `apps/api/routers/conversations.py::DELETE /api/v1/conversations/{id}` (soft delete) setting `archivedAt`; excludes archived rows from the list query
+- [X] T061 [US2] Derive and persist `Conversation.title` from the first user message in `routers/chat.py` (truncate to 140 chars); update `updatedAt` on every new message
 
 ### Backend: Resume an in-flight research run (FR-024)
 
-- [ ] T062 [US2] Ensure `graph.astream_events(..., thread_id=conversation_id)` with `PostgresSaver` is correctly wired so a disconnected client reconnecting to the same `conversation_id` resumes from the last checkpoint; expose a GET variant of `/chat/stream` or a reconnection query param if required by `sse-client.ts`
-- [ ] T063 [US2] Persist every streamed event's summary into `Message.progressEvents` (append on each event) so a reload of the conversation renders the same progress trail that was seen live
+- [X] T062 [US2] Ensure `graph.astream_events(..., thread_id=conversation_id)` with `PostgresSaver` is correctly wired so a disconnected client reconnecting to the same `conversation_id` resumes from the last checkpoint; expose a GET variant of `/chat/stream` or a reconnection query param if required by `sse-client.ts`
+- [X] T063 [US2] Persist every streamed event's summary into `Message.progressEvents` (append on each event) so a reload of the conversation renders the same progress trail that was seen live
 
 ### Frontend: Conversation list and reload behavior
 
-- [ ] T064 [P] [US2] Build `apps/web/app/(dashboard)/conversations/page.tsx` — SSR-fetched paginated list of prior conversations, each linking to `/chat/[id]`; shows title, updated-at, and latest-status badge
-- [ ] T065 [P] [US2] Extend `apps/web/app/(dashboard)/chat/[conversationId]/page.tsx` to SSR-hydrate the Zustand chat store from the `GET /conversations/{id}` response, including any embedded briefs, so the rendered message list on reload is byte-for-byte what the user saw live
-- [ ] T066 [P] [US2] Update `apps/web/lib/sse-client.ts` to resume an in-flight stream on conversation reload if `latest_status == "pending"`; otherwise render the stored final state only
+- [X] T064 [P] [US2] Build `apps/web/app/(dashboard)/conversations/page.tsx` — SSR-fetched paginated list of prior conversations, each linking to `/chat/[id]`; shows title, updated-at, and latest-status badge
+- [X] T065 [P] [US2] Extend `apps/web/app/(dashboard)/chat/[conversationId]/page.tsx` to SSR-hydrate the Zustand chat store from the `GET /conversations/{id}` response, including any embedded briefs, so the rendered message list on reload is byte-for-byte what the user saw live
+- [X] T066 [P] [US2] Update `apps/web/lib/sse-client.ts` to resume an in-flight stream on conversation reload if `latest_status == "pending"`; otherwise render the stored final state only
 
 ### Tests for User Story 2
 
-- [ ] T067 [P] [US2] Add `apps/api/tests/integration/test_conversation_persistence.py`: complete a research run, close the Prisma client, reopen, fetch `/conversations/{id}`, assert all messages + the full brief render identically
-- [ ] T068 [P] [US2] Add `apps/api/tests/integration/test_resume_inflight.py`: start a research run, kill the stream mid-way, reconnect to the same `thread_id`, assert the graph resumes from the last checkpoint and produces a brief (or current progress) — never a lost state
-- [ ] T069 [P] [US2] Add `apps/web/tests/e2e/persistence.spec.ts` (Playwright): happy path, sign out, sign in, open the prior conversation, assert the `<IntelligenceBrief />` renders with the same findings
+- [X] T067 [P] [US2] Add `apps/api/tests/integration/test_conversation_persistence.py`: complete a research run, close the Prisma client, reopen, fetch `/conversations/{id}`, assert all messages + the full brief render identically
+- [X] T068 [P] [US2] Add `apps/api/tests/integration/test_resume_inflight.py`: start a research run, kill the stream mid-way, reconnect to the same `thread_id`, assert the graph resumes from the last checkpoint and produces a brief (or current progress) — never a lost state
+- [X] T069 [P] [US2] Add `apps/web/tests/e2e/persistence.spec.ts` (Playwright): happy path, sign out, sign in, open the prior conversation, assert the `<IntelligenceBrief />` renders with the same findings
 
 **Checkpoint**: Conversations and briefs survive sign-out and reload; in-flight research resumes cleanly.
 

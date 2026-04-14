@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
 	const url = new URL(req.url)
 	const message = url.searchParams.get('message') ?? ''
 	const conversationId = url.searchParams.get('conversation_id')
+	const reconnect = url.searchParams.get('reconnect') === '1'
 
 	const upstream = await fetch(`${FASTAPI_INTERNAL_URL}/api/v1/chat/stream`, {
 		method: 'POST',
@@ -26,7 +27,11 @@ export async function GET(req: NextRequest) {
 			Accept: 'text/event-stream',
 			'X-User-Id': userId,
 		},
-		body: JSON.stringify({ conversation_id: conversationId, message }),
+		body: JSON.stringify({
+			conversation_id: conversationId,
+			message,
+			reconnect,
+		}),
 	})
 
 	return new Response(upstream.body, {

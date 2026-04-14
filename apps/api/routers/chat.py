@@ -39,6 +39,7 @@ from sse.events import (
     Done,
     EphemeralUI,
     ErrorEvent,
+    Progress,
     SseEvent,
     TextDelta,
 )
@@ -77,6 +78,18 @@ async def chat_stream(
     limiter: RateLimiter = Depends(get_rate_limiter),
 ):
     user_id = await _require_user(request)
+
+    if body.reconnect:
+        return await _reconnect_stream(
+            request=request,
+            body=body,
+            user_id=user_id,
+            conversations=conversations,
+            briefs=briefs,
+        )
+
+    if not body.message or not body.message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
 
     # --- rate limit -------------------------------------------------------
     try:
@@ -154,6 +167,18 @@ async def chat_stream(
 
     async def sse_gen():
         alloc = SseEventIdAllocator()
+        progress_trail: list[dict[str, Any]] = []
+
+        def _trail(event: SseEvent) -> None:
+            if isinstance(event, Progress):
+                progress_trail.append(
+                    {
+                        "phase": event.phase,
+                        "message": event.message,
+                        "detail": event.detail,
+                        "at": event.at.isoformat(),
+                    }
+                )
 
         # 1) conversation_ready
         yield await _emit(
@@ -180,6 +205,7 @@ async def chat_stream(
                 _graph.astream_events(graph_state, config=config, version="v2"),
                 message_id=assistant_message_id,
             ):
+                _trail(sse_event)
                 yield await _emit(alloc, sse_event)
 
             # After the run returns, check whether the graph is interrupted
@@ -228,6 +254,7 @@ async def chat_stream(
                     user_id=user_id,
                     role="assistant",
                     content=answer,
+                    progress_events=progress_trail,
                 )
                 yield await _emit(
                     alloc,
@@ -256,6 +283,7 @@ async def chat_stream(
                     role="assistant",
                     content=brief_model.findings[0].claim,
                     brief_id=mongo_id,
+                    progress_events=progress_trail,
                 )
 
                 yield await _emit(
@@ -372,6 +400,96 @@ async def chat_ephemeral(
         )
 
     return {"status": "resumed"}
+
+
+async def _reconnect_stream(
+    *,
+    request: Request,
+    body: ChatRequest,
+    user_id: str,
+    conversations: ConversationStore,
+    briefs: BriefStore,
+) -> StreamingResponse:
+    """Resume a stream for an existing conversation without appending input.
+
+    Emits conversation_ready, replays any stored brief as an ephemeral_ui
+    event, then terminates with `done`. When the graph is still interrupted
+    (e.g. waiting on clarification) we wait on resume_bus like the fresh
+    flow. This path is invoked when the client reconnects after a drop.
+    """
+
+    conversation_id = body.conversation_id or ""
+    conv = await conversations.get_conversation(
+        conversation_id=conversation_id, user_id=user_id
+    )
+    if conv is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "not_found",
+                    "message": "Conversation not found.",
+                    "recoverable": False,
+                }
+            },
+        )  # type: ignore[return-value]
+
+    prior_brief = await briefs.latest_for_conversation(
+        conversation_id=conversation_id, user_id=user_id
+    )
+    assistant_message_id = f"msg_{uuid4().hex[:12]}"
+
+    async def gen():
+        alloc = SseEventIdAllocator()
+        yield await _emit(
+            alloc,
+            ConversationReady(
+                conversation_id=conversation_id, at=_now(), is_new=False
+            ),
+        )
+
+        if prior_brief is not None:
+            brief_json = prior_brief.model_dump(mode="json")
+            yield await _emit(
+                alloc,
+                EphemeralUI(
+                    conversation_id=conversation_id,
+                    at=_now(),
+                    message_id=assistant_message_id,
+                    component_type="intelligence_brief",
+                    component=brief_json,
+                ),
+            )
+            yield await _emit(
+                alloc,
+                Done(
+                    conversation_id=conversation_id,
+                    at=_now(),
+                    final_status="brief_ready",
+                    summary="replayed from stored brief",
+                ),
+            )
+            return
+
+        yield await _emit(
+            alloc,
+            Done(
+                conversation_id=conversation_id,
+                at=_now(),
+                final_status="text_only",
+                summary="no stored brief to resume",
+            ),
+        )
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # --- helpers -----------------------------------------------------------------

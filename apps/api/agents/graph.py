@@ -1,15 +1,19 @@
 """LangGraph state graph: supervisor → {research | clarification → research | END}.
 
-T023 scaffolded this; Phase 3 fills in real node bodies (supervisor, research,
-clarification) and the PostgresSaver checkpointer is wired by T062. For the
-MVP we run with InMemorySaver so tests do not require a database.
+The checkpointer is either AsyncPostgresSaver (when `LANGGRAPH_CHECKPOINT_URL`
+or `DATABASE_URL` points at a reachable Postgres) or `InMemorySaver` for
+tests / local dev without a database. T062 wires the Postgres path.
 """
 
+import logging
+import os
 from typing import Annotated, Any, TypedDict
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+
+log = logging.getLogger(__name__)
 
 from agents.clarification import clarification_node
 from agents.research import research_node
@@ -40,6 +44,29 @@ def _route_after_supervisor(state: GraphState) -> str:
     return END
 
 
+def _default_checkpointer() -> Any:
+    """Best-effort Postgres-backed checkpointer, falling back to in-memory.
+
+    We try AsyncPostgresSaver only when an explicit opt-in env var is set so
+    tests and local runs never block on a database connection.
+    """
+    url = os.getenv("LANGGRAPH_CHECKPOINT_URL")
+    if not url:
+        return InMemorySaver()
+    try:  # pragma: no cover — exercised only with a real DB
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        saver_cm = AsyncPostgresSaver.from_conn_string(url)
+        # The context-manager form is how upstream docs recommend using it;
+        # we deliberately keep it open for the lifetime of the process.
+        saver = saver_cm.__enter__()  # type: ignore[union-attr]
+        log.info("graph using AsyncPostgresSaver")
+        return saver
+    except Exception as exc:  # pragma: no cover
+        log.warning("failed to init AsyncPostgresSaver, falling back: %s", exc)
+        return InMemorySaver()
+
+
 def build_graph(checkpointer: Any | None = None):
     builder = StateGraph(GraphState)
     builder.add_node("supervisor", supervisor_node)
@@ -57,4 +84,4 @@ def build_graph(checkpointer: Any | None = None):
     builder.add_edge("clarification", "research")
     builder.add_edge("research", END)
 
-    return builder.compile(checkpointer=checkpointer or InMemorySaver())
+    return builder.compile(checkpointer=checkpointer or _default_checkpointer())

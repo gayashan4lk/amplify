@@ -89,18 +89,29 @@ class ConversationStore:
         content: str,
         brief_id: str | None = None,
         failure_record_id: str | None = None,
+        progress_events: list[dict[str, Any]] | None = None,
     ) -> Any | None:
         if not await self.get_conversation(conversation_id=conversation_id, user_id=user_id):
             return None
-        return await self._prisma.message.create(
-            data={
-                "conversationId": conversation_id,
-                "role": role,
-                "content": content,
-                "briefId": brief_id,
-                "failureRecordId": failure_record_id,
-            }
+        data: dict[str, Any] = {
+            "conversationId": conversation_id,
+            "role": role,
+            "content": content,
+            "briefId": brief_id,
+            "failureRecordId": failure_record_id,
+        }
+        if progress_events is not None:
+            data["progressEvents"] = progress_events
+        created = await self._prisma.message.create(data=data)
+        # Touch the parent conversation so `updatedAt` reflects the last
+        # activity — Prisma's `@updatedAt` only fires on a direct update.
+        from datetime import UTC, datetime
+
+        await self._prisma.conversation.update(
+            where={"id": conversation_id},
+            data={"updatedAt": datetime.now(UTC)},
         )
+        return created
 
     # --- Research requests ------------------------------------------------
 

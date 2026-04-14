@@ -12,6 +12,7 @@ type ConversationDetailResponse = {
 	title: string
 	created_at: string
 	updated_at: string
+	latest_status: 'complete' | 'pending' | 'failed'
 	messages: Array<{
 		id: string
 		role: 'user' | 'system' | 'assistant'
@@ -73,6 +74,7 @@ export default async function ConversationPage({
 		<ChatWorkspace
 			conversationId={conversationId}
 			initialMessages={initialMessages}
+			latestStatus={detail.latest_status}
 		/>
 	)
 }
