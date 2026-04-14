@@ -4,5 +4,5 @@ import { getServerSession } from '@/lib/auth-server'
 
 export default async function Home() {
 	const session = await getServerSession()
-	redirect(session?.user?.id ? '/chat' : '/login')
+	redirect(session?.user?.id ? '/conversations' : '/login')
 }
