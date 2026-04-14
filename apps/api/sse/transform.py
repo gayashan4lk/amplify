@@ -12,6 +12,7 @@ from typing import Any
 from sse.events import (
     AgentEnd,
     AgentStart,
+    EphemeralUI,
     Progress,
     SseEvent,
 )
@@ -39,11 +40,15 @@ class SseEventIdAllocator:
 async def transform_langgraph_events(
     conversation_id: str,
     source: AsyncIterator[dict[str, Any]],
+    *,
+    message_id: str = "",
 ) -> AsyncIterator[SseEvent]:
     """Map a subset of LangGraph astream_events v2 payloads to typed SSE events.
 
-    Note: this is a deliberately narrow mapping. Phase 3 (US1) will extend it
-    as the research node emits additional event kinds.
+    Handles:
+    - on_chain_start/end for supervisor/research/clarification nodes
+    - on_custom_event "progress" → Progress
+    - on_custom_event "ephemeral_ui" → EphemeralUI
     """
 
     async for raw in source:
@@ -70,4 +75,13 @@ async def transform_langgraph_events(
                 phase=data.get("phase", "planning"),
                 message=data.get("message", ""),
                 detail=data.get("detail"),
+            )
+        elif kind == "on_custom_event" and name == "ephemeral_ui":
+            data = raw.get("data", {}) or {}
+            yield EphemeralUI(
+                conversation_id=conversation_id,
+                at=_now(),
+                message_id=message_id,
+                component_type=data.get("component_type", "intelligence_brief"),
+                component=data.get("component", {}),
             )

@@ -1,7 +1,8 @@
-"""LangGraph state graph: supervisor → {research | clarification | END}.
+"""LangGraph state graph: supervisor → {research | clarification → research | END}.
 
-This is the skeleton wired in Phase 2. Phase 3 fills in real node bodies and
-the PostgresSaver checkpointer pointed at Neon.
+T023 scaffolded this; Phase 3 fills in real node bodies (supervisor, research,
+clarification) and the PostgresSaver checkpointer is wired by T062. For the
+MVP we run with InMemorySaver so tests do not require a database.
 """
 
 from typing import Annotated, Any, TypedDict
@@ -27,8 +28,13 @@ class GraphState(TypedDict, total=False):
 def _route_after_supervisor(state: GraphState) -> str:
     decision = state.get("supervisor_decision") or {}
     route = decision.get("route", "out_of_scope")
-    if route == "research" or route == "followup_on_existing_brief":
+    if route == "research":
         return "research"
+    if route == "followup_on_existing_brief":
+        # For a followup we have no new research to run; we rely on the chat
+        # router to stream a text_delta response grounded in the stored brief,
+        # so the graph itself ends here.
+        return END
     if route == "clarification_needed":
         return "clarification"
     return END
@@ -46,7 +52,9 @@ def build_graph(checkpointer: Any | None = None):
         _route_after_supervisor,
         {"research": "research", "clarification": "clarification", END: END},
     )
+    # After clarification completes (user chose a narrowing), fall through to
+    # the research node directly — cheaper than re-entering the supervisor.
+    builder.add_edge("clarification", "research")
     builder.add_edge("research", END)
-    builder.add_edge("clarification", END)
 
     return builder.compile(checkpointer=checkpointer or InMemorySaver())

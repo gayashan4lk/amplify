@@ -1,19 +1,8 @@
-import prisma from "@/lib/prisma";
+import { redirect } from 'next/navigation'
+
+import { getServerSession } from '@/lib/auth-server'
 
 export default async function Home() {
-
-  const posts = await prisma.post.findMany()
-
-  return (
-    <div>
-      <main>
-        <h1>Posts</h1>
-        <ul>
-          {posts.map(post => (
-            <li key={post.id}><h1 className="text-2xl font-black">{post.title}</h1> {post.content}</li>
-          ))}
-        </ul>
-      </main>
-    </div>
-  );
+	const session = await getServerSession()
+	redirect(session?.user?.id ? '/chat' : '/login')
 }

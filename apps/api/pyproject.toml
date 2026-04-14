@@ -35,6 +35,11 @@ extend-exclude = ["db/prisma/generated", "__pycache__"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+# FastAPI's Depends() is a function call in arg defaults on purpose.
+extend-ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
