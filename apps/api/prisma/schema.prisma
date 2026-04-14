@@ -1,15 +1,17 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// MIRROR of apps/web/prisma/schema.prisma.
+// The only intentional diff from the web schema is the `generator` block.
+// Keep this file in sync by hand: the web schema owns migration history.
+// See README.md in this directory for the sync rule.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-py"
+  interface = "asyncio"
+  recursive_type_depth = 5
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ---------------------------------------------------------------------------

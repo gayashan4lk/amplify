@@ -15,6 +15,7 @@ dependencies = [
     "motor>=3.7.1",
     "prisma>=0.15.0",
     "pydantic>=2",
+    "pydantic-settings>=2.13.1",
     "redis>=5.3.1",
     "tavily-python>=0.7.23",
 ]

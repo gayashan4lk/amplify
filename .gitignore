@@ -24,7 +24,8 @@ out/
 .turbo/
 
 # Prisma
-apps/api/db/prisma/client/
+apps/api/prisma/client/
+apps/api/prisma/generated/
 
 # Playwright
 apps/web/test-results/

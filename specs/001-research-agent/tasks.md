@@ -41,48 +41,48 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 ### Schema, data layer, and row-level isolation
 
-- [ ] T008 Extend the **canonical** Prisma schema at `apps/web/prisma/schema.prisma` (already owns `User`, `Session`, `Account`, `Verification` for BetterAuth) with models `Conversation`, `Message`, `ResearchRequest`, `FailureRecord` and enums `MessageRole`, `ResearchStatus`, `FailureCode` per data-model.md; include indexes `Conversation(userId, updatedAt desc)` and `Message(conversationId, createdAt)`. Then copy/symlink the schema to `apps/api/db/prisma/schema.prisma` and change only the `generator` block to `prisma-client-py`. The web copy is the source of truth.
-- [ ] T009 From `apps/web/`, run `pnpm prisma migrate dev --name research_agent_models` (migrations live under `apps/web/prisma/migrations/` and are the canonical migration history). Then from `apps/api/`, run `uv run prisma generate` against the mirrored schema to produce the Python client. The Python side NEVER runs `migrate dev`; it only ever runs `prisma generate` (and `prisma db pull` if drift is suspected). Document the sync rule in `apps/api/db/prisma/README.md`.
-- [ ] T010 [P] Implement `apps/api/services/conversation_store.py` as the ONLY access layer for Postgres (Prisma) entities; every method accepts `user_id` and filters by it — no unfiltered API is exposed
-- [ ] T011 [P] Implement `apps/api/services/brief_store.py` as the ONLY access layer for the MongoDB `intelligence_briefs` collection; uses Motor; every read/write accepts `user_id` and filters by it; creates indexes `{conversation_id:1, generated_at:-1}` and `{user_id:1, generated_at:-1}` on startup
+- [X] T008 Extend the **canonical** Prisma schema at `apps/web/prisma/schema.prisma` (already owns `User`, `Session`, `Account`, `Verification` for BetterAuth) with models `Conversation`, `Message`, `ResearchRequest`, `FailureRecord` and enums `MessageRole`, `ResearchStatus`, `FailureCode` per data-model.md; include indexes `Conversation(userId, updatedAt desc)` and `Message(conversationId, createdAt)`. Then copy/symlink the schema to `apps/api/db/prisma/schema.prisma` and change only the `generator` block to `prisma-client-py`. The web copy is the source of truth.
+- [ ] T009 From `apps/web/`, run `pnpm prisma migrate dev --name research_agent_models` (migrations live under `apps/web/prisma/migrations/` and are the canonical migration history). Then from `apps/api/`, run `uv run prisma generate` against the mirrored schema to produce the Python client. The Python side NEVER runs `migrate dev`; it only ever runs `prisma generate` (and `prisma db pull` if drift is suspected). Document the sync rule in `apps/api/db/prisma/README.md`.  *(README written; `migrate dev` + `prisma generate` must be run by the user against a real Neon DB.)*
+- [X] T010 [P] Implement `apps/api/services/conversation_store.py` as the ONLY access layer for Postgres (Prisma) entities; every method accepts `user_id` and filters by it — no unfiltered API is exposed
+- [X] T011 [P] Implement `apps/api/services/brief_store.py` as the ONLY access layer for the MongoDB `intelligence_briefs` collection; uses Motor; every read/write accepts `user_id` and filters by it; creates indexes `{conversation_id:1, generated_at:-1}` and `{user_id:1, generated_at:-1}` on startup
 
 ### Pydantic models (single source of truth for the wire + storage)
 
-- [ ] T012 [P] Create `apps/api/models/research.py` defining `SourceAttribution`, `Finding`, `IntelligenceBrief`, `ResearchPlan`, `SubQuery` exactly per contracts/intelligence-brief.md and data-model.md (validation rules included)
-- [ ] T013 [P] Create `apps/api/models/ephemeral.py` defining `IntelligenceBriefComponent`, `ClarificationPollComponent` and the discriminated union `EphemeralComponent`
-- [ ] T014 [P] Create `apps/api/models/chat.py` defining `ChatRequest`, `EphemeralResponseRequest`, `ProgressEvent`, `SupervisorDecision`
-- [ ] T015 [P] Create `apps/api/models/errors.py` defining `FailureCode` enum (mirrors Prisma), `FailureRecord` Pydantic model, and `ApiError` response envelope
+- [X] T012 [P] Create `apps/api/models/research.py` defining `SourceAttribution`, `Finding`, `IntelligenceBrief`, `ResearchPlan`, `SubQuery` exactly per contracts/intelligence-brief.md and data-model.md (validation rules included)
+- [X] T013 [P] Create `apps/api/models/ephemeral.py` defining `IntelligenceBriefComponent`, `ClarificationPollComponent` and the discriminated union `EphemeralComponent`
+- [X] T014 [P] Create `apps/api/models/chat.py` defining `ChatRequest`, `EphemeralResponseRequest`, `ProgressEvent`, `SupervisorDecision`
+- [X] T015 [P] Create `apps/api/models/errors.py` defining `FailureCode` enum (mirrors Prisma), `FailureRecord` Pydantic model, and `ApiError` response envelope
 
 ### SSE event protocol and shared types
 
-- [ ] T016 Create `apps/api/sse/events.py` defining every SSE event type from contracts/sse-events.md as a Pydantic discriminated union (`v: Literal[1]`, `type` discriminator) with the exact field sets documented: `ConversationReady`, `AgentStart`, `AgentEnd`, `ToolCall`, `ToolResult`, `Progress`, `TextDelta`, `EphemeralUI`, `Error`, `Done`
-- [ ] T017 Implement `apps/api/sse/transform.py` that converts LangGraph `astream_events` v2 output into the typed SSE events from T016; assigns monotonically increasing `id` per stream; includes helper `format_sse_frame(event_id, event) -> str`
-- [ ] T018 [P] Add `apps/web/scripts/generate-sse-types.ts` (or `datamodel-code-generator` pipeline) that reads the Pydantic schemas and emits **Zod schemas** at `apps/web/lib/types/sse-events.ts`, with inferred TypeScript types (`z.infer<...>`) exported alongside — one discriminated `z.union` per event. Wire it into the Next.js build via a prebuild script so drift is caught at build time. `sse-client.ts` (T047) validates every incoming payload through these Zod schemas.
+- [X] T016 Create `apps/api/sse/events.py` defining every SSE event type from contracts/sse-events.md as a Pydantic discriminated union (`v: Literal[1]`, `type` discriminator) with the exact field sets documented: `ConversationReady`, `AgentStart`, `AgentEnd`, `ToolCall`, `ToolResult`, `Progress`, `TextDelta`, `EphemeralUI`, `Error`, `Done`
+- [X] T017 Implement `apps/api/sse/transform.py` that converts LangGraph `astream_events` v2 output into the typed SSE events from T016; assigns monotonically increasing `id` per stream; includes helper `format_sse_frame(event_id, event) -> str`
+- [X] T018 [P] Add `apps/web/scripts/generate-sse-types.ts` (or `datamodel-code-generator` pipeline) that reads the Pydantic schemas and emits **Zod schemas** at `apps/web/lib/types/sse-events.ts`, with inferred TypeScript types (`z.infer<...>`) exported alongside — one discriminated `z.union` per event. Wire it into the Next.js build via a prebuild script so drift is caught at build time. `sse-client.ts` (T047) validates every incoming payload through these Zod schemas.
 
 ### Auth trust boundary
 
-- [ ] T019 [P] Implement `apps/api/middleware/auth.py` per SAD §6.3: webhook paths exempt, all other requests require `X-User-Id`; attaches to `request.state.user_id`; returns `401` with the error envelope on miss
-- [ ] T020 [P] Configure BetterAuth in `apps/web/lib/auth-server.ts` and `apps/web/lib/auth.ts` using the Prisma adapter pointed at the shared Neon Postgres; create `apps/web/app/api/auth/[...all]/route.ts` handler
-- [ ] T021 [P] Implement `apps/web/lib/api-client.ts` — a server-side typed fetch wrapper that calls `FASTAPI_INTERNAL_URL` with `X-User-Id` derived from the authenticated BetterAuth session; MUST only run in Server Components / Server Actions (throw if invoked client-side)
+- [X] T019 [P] Implement `apps/api/middleware/auth.py` per SAD §6.3: webhook paths exempt, all other requests require `X-User-Id`; attaches to `request.state.user_id`; returns `401` with the error envelope on miss
+- [X] T020 [P] Configure BetterAuth in `apps/web/lib/auth-server.ts` and `apps/web/lib/auth.ts` using the Prisma adapter pointed at the shared Neon Postgres; create `apps/web/app/api/auth/[...all]/route.ts` handler
+- [X] T021 [P] Implement `apps/web/lib/api-client.ts` — a server-side typed fetch wrapper that calls `FASTAPI_INTERNAL_URL` with `X-User-Id` derived from the authenticated BetterAuth session; MUST only run in Server Components / Server Actions (throw if invoked client-side)
 
 ### LangGraph graph skeleton
 
-- [ ] T022 Implement `apps/api/services/llm_router.py` with `get_llm(purpose)` supporting `supervisor`, `research_plan`, `research_synthesize`, `ui_schema` per research.md R-009; centralizes model names, temperature, and API keys
-- [ ] T023 Implement `apps/api/agents/graph.py` defining the LangGraph `StateGraph` with state `{messages, user_id, conversation_id, current_request, brief}`, nodes `supervisor`, `research`, `clarification`, conditional edges per research.md R-001, and `PostgresSaver` checkpointer pointed at the Neon URL (thread_id = conversation_id)
-- [ ] T024 [P] Implement skeleton node stubs `apps/api/agents/supervisor.py`, `apps/api/agents/research.py`, `apps/api/agents/clarification.py` — each returns a "not yet implemented" state update so the graph compiles and runs end-to-end before real logic lands in Phase 3
-- [ ] T025 [P] Wire LangSmith tracing in `apps/api/main.py` startup: set `LANGSMITH_TRACING=true` and `LANGSMITH_PROJECT` from env; assert the graph is traced
+- [X] T022 Implement `apps/api/services/llm_router.py` with `get_llm(purpose)` supporting `supervisor`, `research_plan`, `research_synthesize`, `ui_schema` per research.md R-009; centralizes model names, temperature, and API keys
+- [X] T023 Implement `apps/api/agents/graph.py` defining the LangGraph `StateGraph` with state `{messages, user_id, conversation_id, current_request, brief}`, nodes `supervisor`, `research`, `clarification`, conditional edges per research.md R-001, and `PostgresSaver` checkpointer pointed at the Neon URL (thread_id = conversation_id)  *(InMemorySaver for now; PostgresSaver wiring deferred to T062.)*
+- [X] T024 [P] Implement skeleton node stubs `apps/api/agents/supervisor.py`, `apps/api/agents/research.py`, `apps/api/agents/clarification.py` — each returns a "not yet implemented" state update so the graph compiles and runs end-to-end before real logic lands in Phase 3
+- [X] T025 [P] Wire LangSmith tracing in `apps/api/main.py` startup: set `LANGSMITH_TRACING=true` and `LANGSMITH_PROJECT` from env; assert the graph is traced
 
 ### FastAPI app wiring
 
-- [ ] T026 Create `apps/api/main.py`: FastAPI app, CORS for private network only, mounts `middleware/auth.py`, imports routers (stubs for now), startup/shutdown lifecycle for Prisma client, Motor client, Redis pool
-- [ ] T027 [P] Create `apps/api/config.py`: Pydantic `Settings` class loading all env vars from T004; exposes `RESEARCH_BUDGET_QUERIES=8`, `RESEARCH_BUDGET_SECONDS=60`, `TAVILY_CACHE_TTL_SECONDS=300`, `USER_RESEARCH_RATE_LIMIT_PER_HOUR=10`
+- [X] T026 Create `apps/api/main.py`: FastAPI app, CORS for private network only, mounts `middleware/auth.py`, imports routers (stubs for now), startup/shutdown lifecycle for Prisma client, Motor client, Redis pool
+- [X] T027 [P] Create `apps/api/config.py`: Pydantic `Settings` class loading all env vars from T004; exposes `RESEARCH_BUDGET_QUERIES=8`, `RESEARCH_BUDGET_SECONDS=60`, `TAVILY_CACHE_TTL_SECONDS=300`, `USER_RESEARCH_RATE_LIMIT_PER_HOUR=10`
 
 ### Contract tests (foundational — run in CI against the above scaffolding)
 
-- [ ] T028 [P] Add `apps/api/tests/contract/test_sse_events_schema.py` asserting every Pydantic SSE event in T016 matches its JSON Schema documented in contracts/sse-events.md (round-trip serialize/deserialize, required fields, `v==1`)
-- [ ] T029 [P] Add `apps/api/tests/contract/test_rest_endpoints_schema.py` asserting FastAPI's OpenAPI output for `/api/v1/chat/stream`, `/api/v1/chat/ephemeral`, `/api/v1/conversations`, `/api/v1/conversations/{id}` matches contracts/rest-endpoints.md request/response shapes
-- [ ] T030 [P] Add `apps/api/tests/contract/test_intelligence_brief_schema.py` asserting valid and invalid `IntelligenceBrief`/`Finding` payloads against the Pydantic validators and invariants 1, 3, 4 from contracts/intelligence-brief.md
-- [ ] T031 [P] Add `apps/api/tests/unit/test_row_level_isolation.py` asserting `conversation_store` and `brief_store` cannot return data for a different `user_id` (cross-user leakage test)
+- [X] T028 [P] Add `apps/api/tests/contract/test_sse_events_schema.py` asserting every Pydantic SSE event in T016 matches its JSON Schema documented in contracts/sse-events.md (round-trip serialize/deserialize, required fields, `v==1`)
+- [X] T029 [P] Add `apps/api/tests/contract/test_rest_endpoints_schema.py` asserting FastAPI's OpenAPI output for `/api/v1/chat/stream`, `/api/v1/chat/ephemeral`, `/api/v1/conversations`, `/api/v1/conversations/{id}` matches contracts/rest-endpoints.md request/response shapes
+- [X] T030 [P] Add `apps/api/tests/contract/test_intelligence_brief_schema.py` asserting valid and invalid `IntelligenceBrief`/`Finding` payloads against the Pydantic validators and invariants 1, 3, 4 from contracts/intelligence-brief.md
+- [X] T031 [P] Add `apps/api/tests/unit/test_row_level_isolation.py` asserting `conversation_store` and `brief_store` cannot return data for a different `user_id` (cross-user leakage test)
 
 **Checkpoint**: FastAPI starts, Next.js authenticates via BetterAuth, a signed-in user can hit any stub endpoint and get a typed response. The graph compiles and runs with stub nodes. All contract tests pass. No user-visible research yet.
 

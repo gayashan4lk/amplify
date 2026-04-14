@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "tsx scripts/generate-sse-types.ts",
     "build": "next build",
     "start": "next start",
+    "generate:sse-types": "tsx scripts/generate-sse-types.ts",
     "lint": "biome check",
     "format": "biome format --write"
   },
