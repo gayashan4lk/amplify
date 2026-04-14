@@ -20,7 +20,9 @@ class FakeStructuredLLM:
     def __init__(self, response: Any) -> None:
         self._resp = response
 
-    def with_structured_output(self, _cls: Any) -> FakeStructuredLLM:
+    def with_structured_output(
+        self, _cls: Any, *_args: Any, **_kwargs: Any
+    ) -> FakeStructuredLLM:
         return self
 
     async def ainvoke(self, _prompt: Any) -> Any:

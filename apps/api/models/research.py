@@ -109,3 +109,40 @@ class SubQuery(BaseModel):
 class ResearchPlan(BaseModel):
     sub_queries: list[SubQuery] = Field(..., min_length=3, max_length=5)
     rationale: str
+
+
+class RawFinding(BaseModel):
+    """Permissive mirror of `Finding` used as the LLM tool-calling schema.
+
+    No length caps, no model_validators — `_normalize_raw_brief` in
+    agents/research.py is responsible for converting this into a strict
+    `Finding` (truncating, downgrading confidence, supplying default notes).
+    """
+
+    id: str
+    rank: int = Field(..., ge=1)
+    claim: str
+    evidence: str
+    confidence: Confidence
+    sources: list[SourceAttribution] = Field(default_factory=list)
+    contradicts: list[str] = Field(default_factory=list)
+    unsourced: bool = False
+    notes: str | None = None
+
+
+class RawIntelligenceBrief(BaseModel):
+    """Permissive mirror of `IntelligenceBrief` used as the LLM tool-calling
+    schema. Top-level identity fields (id, user_id, conversation_id, ...) are
+    optional here because `_research_body` overwrites them after synthesis."""
+
+    id: str | None = None
+    v: int = 1
+    user_id: str | None = None
+    conversation_id: str | None = None
+    research_request_id: str | None = None
+    scoped_question: str
+    status: BriefStatus = "low_confidence"
+    findings: list[RawFinding] = Field(default_factory=list)
+    generated_at: datetime | None = None
+    model_used: str | None = None
+    trace_id: str | None = None

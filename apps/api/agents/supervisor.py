@@ -80,7 +80,9 @@ async def supervisor_node(state: dict[str, Any]) -> dict[str, Any]:
     messages = state.get("messages") or []
     brief = state.get("brief")
 
-    llm = get_llm("supervisor").with_structured_output(SupervisorDecision)
+    llm = get_llm("supervisor").with_structured_output(
+        SupervisorDecision, method="function_calling"
+    )
 
     context_lines: list[str] = []
     if brief:

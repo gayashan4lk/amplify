@@ -24,6 +24,8 @@ export type SseClientOptions = {
 	onClose?: () => void
 }
 
+const MAX_RETRIES = 3
+
 export class SseClient {
 	private source: EventSource | null = null
 	private closed = false
@@ -56,6 +58,12 @@ export class SseClient {
 			}
 			const eventId = evt.lastEventId || `${Date.now()}`
 			this.opts.onEvent(eventId, result.data)
+			// Server-sent `done` terminates the stream. EventSource treats the
+			// subsequent socket close as an error, so we must close ourselves
+			// first to prevent the reconnect loop.
+			if (result.data.type === 'done' || result.data.type === 'error') {
+				this.close()
+			}
 		}
 
 		es.onmessage = handleMessage
@@ -78,7 +86,11 @@ export class SseClient {
 			if (this.closed) return
 			es.close()
 			this.source = null
-			this.retries = Math.min(this.retries + 1, 4)
+			if (this.retries >= MAX_RETRIES) {
+				this.close()
+				return
+			}
+			this.retries += 1
 			const backoff = 2000 * 2 ** (this.retries - 1)
 			setTimeout(() => {
 				if (!this.closed) this.start()

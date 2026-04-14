@@ -29,7 +29,9 @@ async def _generate_options(raw_question: str) -> list[str]:
     class _Options(BaseModel):
         options: list[str] = Field(..., min_length=3, max_length=4)
 
-    llm = get_llm("ui_schema").with_structured_output(_Options)
+    llm = get_llm("ui_schema").with_structured_output(
+        _Options, method="function_calling"
+    )
     try:
         resp: _Options = await llm.ainvoke(  # type: ignore[assignment]
             [

@@ -19,9 +19,16 @@ from models.errors import FailureCode
 from models.research import (
     Finding,
     IntelligenceBrief,
+    RawIntelligenceBrief,
     ResearchPlan,
     SourceAttribution,
 )
+
+STRONG_SOURCE_TYPES = {"news", "official", "competitor_site"}
+CLAIM_MAX = 280
+EVIDENCE_MAX = 1200
+NOTES_MAX = 500
+UNSOURCED_DEFAULT_NOTE = "Evidence not supported by any verified source."
 from services.llm_router import get_llm
 from tools.tavily_search import TavilyTool, get_registered_urls, reset_registry
 
@@ -53,13 +60,21 @@ must state an `angle` (competitive, audience, market, channel, temporal, \
 adjacent) and a short `query` string."""
 
 SYNTH_PROMPT = """You are the research synthesis step for Amplify. Produce a \
-structured IntelligenceBrief. Use ONLY URLs that appear in the provided \
-snippets — never invent a URL. High confidence requires either 2+ sources OR \
-one source whose source_type is in {news, official, competitor_site}."""
+structured IntelligenceBrief.
+
+Rules:
+- Use ONLY URLs that appear in the provided snippets — never invent a URL.
+- Each finding's `claim` MUST be <= 280 characters. Keep `evidence` <= 1200 characters.
+- Mark `confidence="high"` only if a finding has >= 2 sources OR exactly one source \
+whose `source_type` is in {news, official, competitor_site}. Otherwise use "medium" or "low".
+- If a finding has no supporting source, set `unsourced=true` AND set `notes` \
+explaining why it cannot be sourced. Never emit `unsourced=true` without `notes`."""
 
 
 async def _plan(raw_question: str) -> ResearchPlan:
-    llm = get_llm("research_plan").with_structured_output(ResearchPlan)
+    llm = get_llm("research_plan").with_structured_output(
+        ResearchPlan, method="function_calling"
+    )
     prompt = [
         SystemMessage(content=PLAN_PROMPT),
         HumanMessage(content=f"Question: {raw_question}"),
@@ -67,7 +82,80 @@ async def _plan(raw_question: str) -> ResearchPlan:
     try:
         return await llm.ainvoke(prompt)  # type: ignore[return-value]
     except Exception as exc:
+        log.exception("research plan failed")
         raise LLMInvalidOutput(f"research plan failed: {exc}") from exc
+
+
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    # Leave room for the ellipsis char.
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _normalize_raw_brief(
+    raw: Any, *, scoped_question: str
+) -> IntelligenceBrief:
+    """Convert a permissive RawIntelligenceBrief (or anything duck-typed the
+    same way) into a strict IntelligenceBrief, repairing common LLM slips."""
+    kept: list[Finding] = []
+    for rf in getattr(raw, "findings", []) or []:
+        claim = _truncate(rf.claim or "", CLAIM_MAX)
+        evidence = _truncate(rf.evidence or "", EVIDENCE_MAX)
+        notes = rf.notes
+        if notes is not None:
+            notes = _truncate(notes, NOTES_MAX)
+        unsourced = bool(rf.unsourced)
+        sources = list(rf.sources or [])
+
+        if unsourced and not notes:
+            notes = UNSOURCED_DEFAULT_NOTE
+
+        confidence = rf.confidence
+        if confidence == "high" and not unsourced:
+            strong = any(s.source_type in STRONG_SOURCE_TYPES for s in sources)
+            if not (len(sources) >= 2 or (len(sources) == 1 and strong)):
+                confidence = "medium"
+
+        try:
+            kept.append(
+                Finding(
+                    id=rf.id,
+                    rank=rf.rank,
+                    claim=claim,
+                    evidence=evidence,
+                    confidence=confidence,
+                    sources=sources,
+                    contradicts=list(rf.contradicts or []),
+                    unsourced=unsourced,
+                    notes=notes,
+                )
+            )
+        except Exception:
+            log.warning("dropping finding %s after normalization failure", rf.id)
+            continue
+
+    if not kept:
+        raise LLMInvalidOutput("synthesis produced no usable findings after normalization")
+
+    status = (
+        "complete"
+        if len(kept) >= 3 and any(f.confidence == "high" for f in kept)
+        else "low_confidence"
+    )
+    return IntelligenceBrief(
+        id=getattr(raw, "id", None) or f"br_{uuid4().hex[:12]}",
+        v=1,
+        user_id=getattr(raw, "user_id", None) or "",
+        conversation_id=getattr(raw, "conversation_id", None) or "",
+        research_request_id=getattr(raw, "research_request_id", None) or "",
+        scoped_question=getattr(raw, "scoped_question", None) or scoped_question,
+        status=status,
+        findings=kept,
+        generated_at=getattr(raw, "generated_at", None) or datetime.now(UTC),
+        model_used=getattr(raw, "model_used", None) or "unknown",
+        trace_id=getattr(raw, "trace_id", None),
+    )
 
 
 async def _synthesize(
@@ -78,7 +166,9 @@ async def _synthesize(
     scoped_question: str,
     snippets: list[dict[str, Any]],
 ) -> IntelligenceBrief:
-    llm = get_llm("research_synthesize").with_structured_output(IntelligenceBrief)
+    llm = get_llm("research_synthesize").with_structured_output(
+        RawIntelligenceBrief, method="function_calling"
+    )
     context = {
         "user_id": user_id,
         "conversation_id": conversation_id,
@@ -91,9 +181,17 @@ async def _synthesize(
         HumanMessage(content=f"Context:\n{context}"),
     ]
     try:
-        return await llm.ainvoke(prompt)  # type: ignore[return-value]
+        raw = await llm.ainvoke(prompt)
     except Exception as exc:
+        log.exception("research synthesis failed")
         raise LLMInvalidOutput(f"synthesis failed: {exc}") from exc
+    try:
+        return _normalize_raw_brief(raw, scoped_question=scoped_question)
+    except LLMInvalidOutput:
+        raise
+    except Exception as exc:
+        log.exception("research synthesis normalization failed")
+        raise LLMInvalidOutput(f"synthesis normalization failed: {exc}") from exc
 
 
 def _filter_fabricated(

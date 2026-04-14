@@ -16,7 +16,7 @@ Purpose = Literal["supervisor", "research_plan", "research_synthesize", "ui_sche
 def _supervisor() -> BaseChatModel:
     s = get_settings()
     return ChatAnthropic(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-haiku-4-5-20251001",
         temperature=0.1,
         anthropic_api_key=s.anthropic_api_key,
         timeout=30,
@@ -29,7 +29,7 @@ def _supervisor() -> BaseChatModel:
 def _research_plan() -> BaseChatModel:
     s = get_settings()
     return ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-5.4-nano-2026-03-17",
         temperature=0.2,
         api_key=s.openai_api_key,
         timeout=30,
@@ -40,7 +40,7 @@ def _research_plan() -> BaseChatModel:
 def _research_synthesize() -> BaseChatModel:
     s = get_settings()
     return ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-5.4-nano-2026-03-17",
         temperature=0.1,
         api_key=s.openai_api_key,
         timeout=45,
@@ -51,7 +51,7 @@ def _research_synthesize() -> BaseChatModel:
 def _ui_schema() -> BaseChatModel:
     s = get_settings()
     return ChatAnthropic(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-haiku-4-5-20251001",
         temperature=0.0,
         anthropic_api_key=s.anthropic_api_key,
         timeout=30,
