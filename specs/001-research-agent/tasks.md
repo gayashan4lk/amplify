@@ -24,12 +24,12 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 **Purpose**: Stand up the monorepo skeleton, local infrastructure, and toolchains so every later phase has a working build.
 
-- [ ] T001 Create monorepo directory structure per plan.md §Project Structure: `apps/web/`, `apps/api/`, `railway.toml` stub, `README.md` pointing to `specs/001-research-agent/quickstart.md`. Env examples live per-app, not at the root.
-- [ ] T002 [P] Initialize FastAPI project at `apps/api/` with `pyproject.toml` (Python 3.13) and `uv.lock`; dependencies: `fastapi`, `uvicorn[standard]`, `langgraph`, `langchain-openai`, `langchain-anthropic`, `pydantic>=2`, `prisma` (prisma-client-py), `motor`, `arq`, `tavily-python`, `httpx`, `langsmith`, `redis`; dev deps: `pytest`, `pytest-asyncio`, `respx`, `ruff`
-- [ ] T003 [P] Initialize Next.js 16 project at `apps/web/` with `pnpm`, TypeScript 5.x, Tailwind CSS 4, Shadcn/ui, Zustand, BetterAuth, `zod`, Prisma (`@prisma/client` + `prisma` CLI), Vitest, Playwright; App Router enabled
-- [ ] T004 [P] Write `apps/web/example.env` and `apps/api/eample.env` (keep existing filenames) with cloud-free-tier URLs (Neon, MongoDB Atlas, Upstash) and the keys each app needs: web gets `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `FASTAPI_INTERNAL_URL`; api gets `DATABASE_URL`, `MONGODB_URI`, `REDIS_URL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`. Both apps point at the same Neon `DATABASE_URL` in dev.
-- [ ] T005 [P] Configure Ruff for `apps/api/` and Biome for `apps/web/` (project already uses `@biomejs/biome`); add `format` and `lint` scripts in each app. Do NOT introduce ESLint or Prettier.
-- [ ] T006 [P] Add GitHub Actions CI workflow at `.github/workflows/ci.yml`: runs backend `pytest`, frontend `vitest`, lint, and type checks; uses fixtures not live APIs
+- [X] T001 Create monorepo directory structure per plan.md §Project Structure: `apps/web/`, `apps/api/`, `railway.toml` stub, `README.md` pointing to `specs/001-research-agent/quickstart.md`. Env examples live per-app, not at the root.
+- [X] T002 [P] Initialize FastAPI project at `apps/api/` with `pyproject.toml` (Python 3.13) and `uv.lock`; dependencies: `fastapi`, `uvicorn[standard]`, `langgraph`, `langchain-openai`, `langchain-anthropic`, `pydantic>=2`, `prisma` (prisma-client-py), `motor`, `arq`, `tavily-python`, `httpx`, `langsmith`, `redis`; dev deps: `pytest`, `pytest-asyncio`, `respx`, `ruff`
+- [X] T003 [P] Initialize Next.js 16 project at `apps/web/` with `pnpm`, TypeScript 5.x, Tailwind CSS 4, Shadcn/ui, Zustand, BetterAuth, `zod`, Prisma (`@prisma/client` + `prisma` CLI), Vitest, Playwright; App Router enabled
+- [X] T004 [P] Write `apps/web/example.env` and `apps/api/eample.env` (keep existing filenames) with cloud-free-tier URLs (Neon, MongoDB Atlas, Upstash) and the keys each app needs: web gets `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `FASTAPI_INTERNAL_URL`; api gets `DATABASE_URL`, `MONGODB_URI`, `REDIS_URL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`. Both apps point at the same Neon `DATABASE_URL` in dev.
+- [X] T005 [P] Configure Ruff for `apps/api/` and Biome for `apps/web/` (project already uses `@biomejs/biome`); add `format` and `lint` scripts in each app. Do NOT introduce ESLint or Prettier.
+- [X] T006 [P] Add GitHub Actions CI workflow at `.github/workflows/ci.yml`: runs backend `pytest`, frontend `vitest`, lint, and type checks; uses fixtures not live APIs
 
 **Checkpoint**: `uv run uvicorn main:app` and `pnpm dev` both start cleanly against the cloud-provisioned dev databases; CI passes on an empty project.
 

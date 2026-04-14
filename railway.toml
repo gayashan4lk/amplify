@@ -1,0 +1,6 @@
+# Railway deployment config (stub — filled in at T088)
+# Two services: `web` (public Next.js) and `api` (private-network FastAPI).
+# See plan.md §Project Structure and ADR-006.
+
+[build]
+builder = "railpack"
