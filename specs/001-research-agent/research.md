@@ -42,7 +42,11 @@ pointed at the same Neon Postgres instance Prisma uses, on a dedicated
 **Rationale**: Satisfies FR-024 (resumption after disconnect) and Constitution
 principle about no custom state serialisation. Reusing Neon avoids adding a new
 datastore. LangGraph owns the schema for its own tables; Prisma owns the rest —
-no conflict because the tables are disjoint.
+no conflict because the tables are disjoint. Prisma itself is dual-owned:
+`apps/web/prisma/` is the canonical schema and migration history (Node
+Prisma, used by BetterAuth); `apps/api/db/prisma/` is a hand-kept mirror that
+only changes the `generator` to `prisma-client-py`. FastAPI runs
+`prisma generate` but never `migrate dev`.
 
 **Alternatives considered**:
 - *Redis checkpointer* — faster but volatile. Risks losing in-flight research on

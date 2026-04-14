@@ -170,22 +170,21 @@ amplify/
 │       │   └── channel_manager.py    # Channel integration abstraction
 │       ├── db/
 │       │   └── prisma/
-│       │       └── schema.prisma     # Prisma schema for Neon Postgres
+│       │       ├── schema.prisma     # MIRROR of apps/web/prisma/schema.prisma
+│       │       │                     # (generator = prisma-client-py)
+│       │       └── README.md         # Sync rules with apps/web/prisma/
 │       ├── config.py                 # Settings (env vars, secrets)
-│       ├── pyproject.toml            # uv project config + dependencies
-│       └── uv.lock                   # uv lockfile (deterministic builds)
+│       ├── pyproject.toml            # uv project config, Python 3.13
+│       ├── uv.lock                   # uv lockfile (deterministic builds)
+│       └── eample.env                # Per-app env template (FastAPI-only keys)
 │
-├── packages/
-│   └── shared-types/                 # Shared TypeScript types (if needed)
-│       └── index.ts
-│
-├── prisma/
-│   └── schema.prisma                 # Symlinked or shared Prisma schema
+│   [No packages/ workspace — see ADR-001]
+│   [No root prisma/ — canonical schema lives at apps/web/prisma/]
 │
 ├── railway.toml                      # Railway deployment config
-├── .env.example
-├── .env.local                        # Local dev env vars (git-ignored)
 └── README.md
+# Env templates are per-app: apps/web/example.env, apps/api/eample.env.
+# Local env files (apps/web/.env.local, apps/api/.env) are git-ignored.
 ```
 
 ---
@@ -201,6 +200,9 @@ amplify/
 | Components | Shadcn/ui | Accessible, composable, no vendor lock-in |
 | State | Zustand | Lightweight, works with SSR, good for chat state |
 | Auth | BetterAuth (client + server) | Full auth lifecycle in Next.js; FastAPI trusts user context via X-User-Id header |
+| ORM | Prisma (`@prisma/client`) | Canonical schema + migration history live here; used by BetterAuth and Server Actions |
+| Runtime validation | Zod | Validates SSE payloads and API responses at the FastAPI boundary; schemas generated from Pydantic |
+| Lint + format | Biome | Single tool replaces ESLint + Prettier; faster, zero-config |
 | SSE | EventSource API + custom reconnect | Native browser support, auto-reconnect with backoff |
 
 ### 5.2 Chat Interface Architecture
@@ -269,8 +271,8 @@ When the user interacts with an ephemeral component (clicks approve, selects an 
 
 | Concern | Choice | Rationale |
 |---|---|---|
-| Framework | FastAPI | Async-native, SSE support, Pydantic integration |
-| ORM | Prisma (via prisma-client-py) | Type-safe queries, Neon Postgres compatibility |
+| Framework | FastAPI (Python 3.13) | Async-native, SSE support, Pydantic integration |
+| ORM | Prisma (`prisma-client-py`) | Type-safe queries over Neon Postgres. Reads a **mirror** of `apps/web/prisma/schema.prisma`; FastAPI only runs `prisma generate`, never `migrate dev` — migrations flow one way, from web |
 | Agent Framework | LangGraph | Stateful graph orchestration, built-in checkpointing |
 | Observability | LangSmith | Trace every agent run, tool call, and LLM invocation |
 | Task Queue | ARQ (async Redis queue) | Lightweight, async-native, Redis-backed |
@@ -693,6 +695,16 @@ Each database is chosen for its strengths. Data is not duplicated across stores 
 | Graph State | Neon Postgres | LangGraph checkpoints | Conversation state, agent progress, pending inputs |
 
 ### 8.2 Prisma Schema (Neon Postgres)
+
+> **Ownership.** The canonical schema and migration history live in
+> `apps/web/prisma/` (Node Prisma + BetterAuth adapter).
+> `apps/api/db/prisma/schema.prisma` is a manually-kept mirror; the **only**
+> diff is `generator client { provider = "prisma-client-py" }`. The Python
+> side runs `prisma generate` to produce a typed client; it never runs
+> `migrate dev` or `db push`. When the schema changes, edit the web copy,
+> run `pnpm prisma migrate dev` there, then copy the updated models into
+> the api mirror and run `uv run prisma generate`. See ADR-003.
+
 
 ```prisma
 datasource db {
@@ -1198,12 +1210,23 @@ No Docker required. Local development uses cloud free tiers for backing services
 | Qdrant | Qdrant Cloud | Free (1GB) | Create cluster at cloud.qdrant.io, copy URL + API key |
 | Postgres | Neon | Free (0.5GB) | Same instance for dev and prod (use separate databases) |
 
-All connection strings go in `.env.local`:
+Connection strings and secrets live in **per-app env files**, not a shared
+root file. Each app loads only what it needs; the Neon `DATABASE_URL` is
+duplicated into both because both apps talk to Postgres directly (web via
+`@prisma/client` + BetterAuth, api via `prisma-client-py`).
 
 ```bash
-# .env.local
-DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/growthdb_dev?sslmode=require
-MONGODB_URL=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/amplify_dev
+# apps/web/.env.local
+DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/amplify_dev?sslmode=require
+BETTER_AUTH_SECRET=dev-secret
+BETTER_AUTH_URL=http://localhost:3000
+FASTAPI_INTERNAL_URL=http://localhost:8000
+```
+
+```bash
+# apps/api/.env
+DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/amplify_dev?sslmode=require
+MONGODB_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/amplify_dev
 REDIS_URL=rediss://default:xxxxx@xxx.upstash.io:6379
 QDRANT_URL=https://xxx.cloud.qdrant.io:6333
 QDRANT_API_KEY=xxxxx
@@ -1214,9 +1237,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_API_KEY=AI...
 TAVILY_API_KEY=tvly-...
 
-# Auth
-BETTER_AUTH_SECRET=dev-secret
-BETTER_AUTH_URL=http://localhost:3000
+# Observability
+LANGSMITH_API_KEY=ls-...
+LANGSMITH_PROJECT=amplify-dev
 ```
 
 ### 15.2 Running Locally
@@ -1265,6 +1288,11 @@ Switch `.env.local` connection strings to `localhost` equivalents when working o
 | Image generation | Nano Banana 2 | DALL-E 3, Midjourney API, Flux | Fast, cost-effective, strong text rendering for ad creatives, API available |
 | Deployment | Railway + Railpack | Vercel + Fly.io, AWS, Render | Monorepo-friendly, simple deployment, private networking between services |
 | Auth | BetterAuth (Next.js only) | NextAuth, Clerk, Supabase Auth | Self-hosted, no vendor lock-in; scoped to Next.js to avoid Python adapter gaps; FastAPI trusts X-User-Id over private network |
+| Prisma ownership | Dual install, one canonical schema in `apps/web/prisma/` | Shared `packages/prisma`, backend-owned schema | Keeps BetterAuth's Node adapter happy without introducing workspace tooling (ADR-001). api side runs `prisma generate` only; migrations flow one way (ADR-003 addendum) |
+| Frontend lint + format | Biome | ESLint + Prettier | One tool, one config, one CI step; faster; drops `eslint-config-next` lockstep (ADR-020) |
+| Frontend runtime validation | Zod, generated from Pydantic | Hand-written TS types; `io-ts` | Catches FastAPI contract drift at the edge; single source of truth in Pydantic; inferred types replace hand-written ones (ADR-021) |
+| Python version | 3.13 | 3.12 | Longest security-patch horizon; all deps support it; already scaffolded on 3.13 (ADR-022) |
+| Env file layout | Per-app (`apps/web/.env.local`, `apps/api/.env`) | Shared root `.env.local` | Each app loads only what it needs; no accidental leakage of API-only secrets into the Next runtime; mirrors ADR-001's "independent services in one repo" stance |
 
 ---
 

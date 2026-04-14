@@ -27,12 +27,14 @@ Observability via LangSmith from day one.
 ## Technical Context
 
 **Language/Version**:
-- Backend: Python 3.12
+- Backend: Python 3.13
 - Frontend: TypeScript 5.x (Node 20 LTS)
 
 **Primary Dependencies**:
 - Frontend: Next.js 16 (App Router), React 19, Tailwind CSS 4, Shadcn/ui,
-  Zustand, BetterAuth, native `EventSource`
+  Zustand, BetterAuth, Prisma (`@prisma/client`), **Zod** (runtime validation
+  for SSE payloads and server-action inputs), Biome (lint + format), native
+  `EventSource`
 - Backend: FastAPI, LangGraph, LangChain (`langchain-openai`,
   `langchain-anthropic`), Pydantic v2, Prisma (`prisma-client-py`), Motor (async
   MongoDB driver), ARQ, `tavily-python`, `httpx`, LangSmith SDK
@@ -50,9 +52,10 @@ Observability via LangSmith from day one.
   for SSE event schemas; LangSmith eval suites for research quality
 - Frontend: Vitest + React Testing Library for components; Playwright for
   end-to-end chat → brief scenarios
-- Schema validation: Pydantic models on the backend, generated TS types on the
-  frontend (via `datamodel-code-generator` or `pydantic2ts`) to keep SSE event
-  shapes in sync
+- Schema validation: Pydantic models on the backend, generated **Zod schemas**
+  on the frontend (via `datamodel-code-generator` or `pydantic2ts` →
+  Zod-emitter) with inferred TS types; SSE payloads are runtime-validated via
+  `.safeParse` in `sse-client.ts` to catch contract drift at the edge
 
 **Target Platform**:
 - Web, modern evergreen browsers (Chrome/Safari/Firefox/Edge latest two majors)
@@ -152,13 +155,19 @@ amplify/
 │   │   ├── lib/
 │   │   │   ├── auth.ts                          # BetterAuth client
 │   │   │   ├── auth-server.ts                   # BetterAuth server
-│   │   │   ├── sse-client.ts
+│   │   │   ├── prisma.ts                        # @prisma/client singleton
+│   │   │   ├── sse-client.ts                    # Zod-validated EventSource wrapper
 │   │   │   ├── api-client.ts                    # Typed fetch to FastAPI (server-side)
 │   │   │   ├── stores/
 │   │   │   │   ├── chat-store.ts                # Zustand: stream buffer, drafts
 │   │   │   │   └── ui-store.ts
 │   │   │   └── types/
-│   │   │       └── sse-events.ts                # Generated from Pydantic
+│   │   │       └── sse-events.ts                # Generated Zod schemas + inferred types
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma                    # CANONICAL schema (web owns migrations)
+│   │   │   └── migrations/
+│   │   ├── biome.json                           # Lint + format
+│   │   ├── example.env                          # Per-app env template
 │   │   └── tests/
 │   │       ├── components/                      # Vitest + RTL
 │   │       └── e2e/                             # Playwright
@@ -190,9 +199,13 @@ amplify/
 │       │   └── transform.py                     # LangGraph astream_events → SSE events
 │       ├── db/
 │       │   └── prisma/
-│       │       └── schema.prisma
+│       │       ├── schema.prisma                # MIRROR of apps/web/prisma/schema.prisma
+│       │       │                                # (generator swapped to prisma-client-py,
+│       │       │                                # kept in sync by hand; web owns migrations)
+│       │       └── README.md                    # Sync rules
 │       ├── config.py
-│       ├── pyproject.toml
+│       ├── pyproject.toml                       # Python 3.13, uv-managed
+│       ├── eample.env                           # Per-app env template (existing)
 │       └── tests/
 │           ├── contract/                        # SSE event + REST schema tests
 │           ├── integration/                     # LangGraph end-to-end with recorded Tavily
@@ -203,15 +216,23 @@ amplify/
 ├── docs/                                        # PRD, SAD, ADR
 ├── specs/001-research-agent/                    # This feature
 ├── railway.toml
-├── .env.example
 └── README.md
+# Note: no root .env.example — env templates live per app
+# (apps/web/example.env, apps/api/eample.env).
 ```
 
 **Structure Decision**: Web application monorepo with `apps/web` (Next.js 16)
 and `apps/api` (FastAPI), matching ADR-001 and SAD §4. No `packages/` workspace
-tooling per ADR-001. Shared SSE event types are generated from Pydantic models
-into `apps/web/lib/types/sse-events.ts` at build time to keep the contract in
-sync without introducing Turborepo.
+tooling per ADR-001. Shared SSE event shapes are generated from Pydantic models
+into `apps/web/lib/types/sse-events.ts` **as Zod schemas** (with inferred TS
+types) at build time to keep the contract in sync without introducing
+Turborepo. **Prisma dual-ownership**: the canonical schema and migration
+history live in `apps/web/prisma/` (Node Prisma + BetterAuth); `apps/api/db/prisma/schema.prisma`
+is a manually-kept mirror whose only diff is `generator client { provider = "prisma-client-py" }`.
+The Python side only runs `prisma generate` — never `migrate`. Env templates
+are per-app (`apps/web/example.env`, `apps/api/eample.env`); there is no root
+`.env.example`. Frontend lint + format is Biome (not ESLint/Prettier). Backend
+is Python 3.13 (not 3.12).
 
 ## Complexity Tracking
 

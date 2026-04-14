@@ -24,11 +24,11 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 **Purpose**: Stand up the monorepo skeleton, local infrastructure, and toolchains so every later phase has a working build.
 
-- [ ] T001 Create monorepo directory structure per plan.md §Project Structure: `apps/web/`, `apps/api/`, top-level `.env.example`, `railway.toml` stub, `README.md` pointing to `specs/001-research-agent/quickstart.md`
-- [ ] T002 [P] Initialize FastAPI project at `apps/api/` with `pyproject.toml` (Python 3.12) and `uv.lock`; dependencies: `fastapi`, `uvicorn[standard]`, `langgraph`, `langchain-openai`, `langchain-anthropic`, `pydantic>=2`, `prisma`, `motor`, `arq`, `tavily-python`, `httpx`, `langsmith`, `redis`; dev deps: `pytest`, `pytest-asyncio`, `respx`, `ruff`
-- [ ] T003 [P] Initialize Next.js 16 project at `apps/web/` with `pnpm`, TypeScript 5.x, Tailwind CSS 4, Shadcn/ui, Zustand, BetterAuth, Vitest, Playwright; App Router enabled
-- [ ] T004 [P] Write `.env.example` at repo root with cloud-free-tier URLs (Neon, MongoDB Atlas, Upstash) and all keys listed in quickstart.md §2 (DATABASE_URL, MONGODB_URI, REDIS_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, TAVILY_API_KEY, LANGSMITH_API_KEY, LANGSMITH_PROJECT, FASTAPI_INTERNAL_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL)
-- [ ] T005 [P] Configure Ruff for `apps/api/` and ESLint/Prettier for `apps/web/`; add `format` and `lint` scripts in each app
+- [ ] T001 Create monorepo directory structure per plan.md §Project Structure: `apps/web/`, `apps/api/`, `railway.toml` stub, `README.md` pointing to `specs/001-research-agent/quickstart.md`. Env examples live per-app, not at the root.
+- [ ] T002 [P] Initialize FastAPI project at `apps/api/` with `pyproject.toml` (Python 3.13) and `uv.lock`; dependencies: `fastapi`, `uvicorn[standard]`, `langgraph`, `langchain-openai`, `langchain-anthropic`, `pydantic>=2`, `prisma` (prisma-client-py), `motor`, `arq`, `tavily-python`, `httpx`, `langsmith`, `redis`; dev deps: `pytest`, `pytest-asyncio`, `respx`, `ruff`
+- [ ] T003 [P] Initialize Next.js 16 project at `apps/web/` with `pnpm`, TypeScript 5.x, Tailwind CSS 4, Shadcn/ui, Zustand, BetterAuth, `zod`, Prisma (`@prisma/client` + `prisma` CLI), Vitest, Playwright; App Router enabled
+- [ ] T004 [P] Write `apps/web/example.env` and `apps/api/eample.env` (keep existing filenames) with cloud-free-tier URLs (Neon, MongoDB Atlas, Upstash) and the keys each app needs: web gets `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `FASTAPI_INTERNAL_URL`; api gets `DATABASE_URL`, `MONGODB_URI`, `REDIS_URL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`. Both apps point at the same Neon `DATABASE_URL` in dev.
+- [ ] T005 [P] Configure Ruff for `apps/api/` and Biome for `apps/web/` (project already uses `@biomejs/biome`); add `format` and `lint` scripts in each app. Do NOT introduce ESLint or Prettier.
 - [ ] T006 [P] Add GitHub Actions CI workflow at `.github/workflows/ci.yml`: runs backend `pytest`, frontend `vitest`, lint, and type checks; uses fixtures not live APIs
 
 **Checkpoint**: `uv run uvicorn main:app` and `pnpm dev` both start cleanly against the cloud-provisioned dev databases; CI passes on an empty project.
@@ -41,8 +41,8 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 ### Schema, data layer, and row-level isolation
 
-- [ ] T008 Create Prisma schema at `apps/api/db/prisma/schema.prisma` with models `User`, `Session`, `Conversation`, `Message`, `ResearchRequest`, `FailureRecord` and enums `MessageRole`, `ResearchStatus`, `FailureCode` per data-model.md; include indexes `Conversation(userId, updatedAt desc)` and `Message(conversationId, createdAt)`
-- [ ] T009 Run `prisma generate` and `prisma migrate dev --name init_research_agent`; commit the generated migration under `apps/api/db/prisma/migrations/`
+- [ ] T008 Extend the **canonical** Prisma schema at `apps/web/prisma/schema.prisma` (already owns `User`, `Session`, `Account`, `Verification` for BetterAuth) with models `Conversation`, `Message`, `ResearchRequest`, `FailureRecord` and enums `MessageRole`, `ResearchStatus`, `FailureCode` per data-model.md; include indexes `Conversation(userId, updatedAt desc)` and `Message(conversationId, createdAt)`. Then copy/symlink the schema to `apps/api/db/prisma/schema.prisma` and change only the `generator` block to `prisma-client-py`. The web copy is the source of truth.
+- [ ] T009 From `apps/web/`, run `pnpm prisma migrate dev --name research_agent_models` (migrations live under `apps/web/prisma/migrations/` and are the canonical migration history). Then from `apps/api/`, run `uv run prisma generate` against the mirrored schema to produce the Python client. The Python side NEVER runs `migrate dev`; it only ever runs `prisma generate` (and `prisma db pull` if drift is suspected). Document the sync rule in `apps/api/db/prisma/README.md`.
 - [ ] T010 [P] Implement `apps/api/services/conversation_store.py` as the ONLY access layer for Postgres (Prisma) entities; every method accepts `user_id` and filters by it — no unfiltered API is exposed
 - [ ] T011 [P] Implement `apps/api/services/brief_store.py` as the ONLY access layer for the MongoDB `intelligence_briefs` collection; uses Motor; every read/write accepts `user_id` and filters by it; creates indexes `{conversation_id:1, generated_at:-1}` and `{user_id:1, generated_at:-1}` on startup
 
@@ -57,7 +57,7 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 - [ ] T016 Create `apps/api/sse/events.py` defining every SSE event type from contracts/sse-events.md as a Pydantic discriminated union (`v: Literal[1]`, `type` discriminator) with the exact field sets documented: `ConversationReady`, `AgentStart`, `AgentEnd`, `ToolCall`, `ToolResult`, `Progress`, `TextDelta`, `EphemeralUI`, `Error`, `Done`
 - [ ] T017 Implement `apps/api/sse/transform.py` that converts LangGraph `astream_events` v2 output into the typed SSE events from T016; assigns monotonically increasing `id` per stream; includes helper `format_sse_frame(event_id, event) -> str`
-- [ ] T018 [P] Add `apps/web/scripts/generate-sse-types.ts` (or `datamodel-code-generator` pipeline) that reads the Pydantic schemas and emits `apps/web/lib/types/sse-events.ts` as a TypeScript discriminated union; wire it into the Next.js build via a prebuild script so drift is caught at build time
+- [ ] T018 [P] Add `apps/web/scripts/generate-sse-types.ts` (or `datamodel-code-generator` pipeline) that reads the Pydantic schemas and emits **Zod schemas** at `apps/web/lib/types/sse-events.ts`, with inferred TypeScript types (`z.infer<...>`) exported alongside — one discriminated `z.union` per event. Wire it into the Next.js build via a prebuild script so drift is caught at build time. `sse-client.ts` (T047) validates every incoming payload through these Zod schemas.
 
 ### Auth trust boundary
 
@@ -123,7 +123,7 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 - [ ] T044 [P] [US1] Build `apps/web/app/(dashboard)/layout.tsx` (authenticated shell) and `apps/web/app/(dashboard)/chat/page.tsx` — the primary workspace entry; redirects to `/login` if not authenticated
 - [ ] T045 [P] [US1] Build `apps/web/app/(dashboard)/chat/[conversationId]/page.tsx` — SSR shell that loads prior messages via `api-client` and hydrates the chat store; opens a fresh SSE stream on new user input
 - [ ] T046 [P] [US1] Build `apps/web/lib/stores/chat-store.ts` (Zustand): holds the message list, the live stream buffer keyed by `message_id`, and dedup state keyed by SSE `event_id`
-- [ ] T047 [US1] Build `apps/web/lib/sse-client.ts`: thin wrapper over `EventSource` that (a) reconnects with exponential backoff, (b) sends `Last-Event-ID`, (c) de-dupes by `event_id`, (d) validates every payload against the generated `sse-events.ts` discriminated union and drops payloads with `v != 1` with a visible toast
+- [ ] T047 [US1] Build `apps/web/lib/sse-client.ts`: thin wrapper over `EventSource` that (a) reconnects with exponential backoff, (b) sends `Last-Event-ID`, (c) de-dupes by `event_id`, (d) validates every payload with the Zod discriminated union from `lib/types/sse-events.ts` (`.safeParse`) and drops payloads with `v != 1` or failing Zod validation, surfacing a visible toast
 - [ ] T048 [US1] Build `apps/web/components/chat/message-input.tsx` — Shadcn-based composer; posts via a Server Action that calls `api-client` and then opens the SSE stream from the client
 - [ ] T049 [US1] Build `apps/web/components/chat/message-list.tsx` and `apps/web/components/chat/stream-renderer.tsx` — stream-renderer switches on `event.type` and renders text deltas, agent status badges, progress lines, and ephemeral components
 - [ ] T050 [P] [US1] Build `apps/web/components/chat/agent-status.tsx` — compact badge showing the currently active LangGraph node based on the last `agent_start`/`agent_end` pair

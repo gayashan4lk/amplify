@@ -9,6 +9,19 @@ Prisma). Document data lives in MongoDB (managed by Motor + Pydantic). The
 link between the two is a single foreign reference (`brief_id`) on the
 `Message` row.
 
+**Prisma ownership.** The canonical schema and the migration history live in
+`apps/web/prisma/` (Node Prisma, used by BetterAuth and Next.js Server
+Actions). `apps/api/db/prisma/schema.prisma` is a hand-kept mirror whose only
+diff is `generator client { provider = "prisma-client-py" }`. FastAPI reads
+and writes Postgres via `prisma-client-py` but NEVER runs `migrate dev` —
+migrations flow one way, from web. This keeps BetterAuth and research models
+in a single schema without introducing a shared package.
+
+**Runtime validation on the web side.** Entities leaving the FastAPI boundary
+are validated on the Next.js side with Zod schemas generated from the Pydantic
+models — see plan.md §Technical Context and tasks.md T018 / T047. This catches
+contract drift at the edge before bad data reaches the UI.
+
 ## Storage map
 
 | Entity | Store | Owner |

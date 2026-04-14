@@ -13,7 +13,7 @@ and see a rendered intelligence brief.
 ## Prerequisites
 
 - Node 20 LTS (`node --version`)
-- Python 3.12 (`python3.12 --version`)
+- Python 3.13 (`python3.13 --version`)
 - `uv` for Python package management (`uv --version`)
 - `pnpm` for Node package management
 - Cloud accounts (free tiers — see ADR-018):
@@ -42,11 +42,31 @@ Per ADR-018, local dev uses managed cloud free tiers — no Docker.
 
 ## 2. Configure environment
 
-Copy `.env.example` to `.env.local` at the repo root and fill in the cloud
-URLs and keys:
+Env templates live **per app**. There is no root `.env.example`.
+
+```bash
+cp apps/web/example.env apps/web/.env.local
+cp apps/api/eample.env  apps/api/.env
+```
+
+**`apps/web/.env.local`** — what Next.js, BetterAuth, and Node Prisma need:
 
 ```
-# Neon Postgres
+# Neon Postgres (shared with FastAPI in dev)
+DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx.region.aws.neon.tech/amplify_dev?sslmode=require
+
+# BetterAuth
+BETTER_AUTH_SECRET=dev-secret-change-me
+BETTER_AUTH_URL=http://localhost:3000
+
+# Next.js → FastAPI (private network in prod, localhost in dev)
+FASTAPI_INTERNAL_URL=http://localhost:8000
+```
+
+**`apps/api/.env`** — what FastAPI, LangGraph, and `prisma-client-py` need:
+
+```
+# Same Neon Postgres (dev shares the instance; prod may differ)
 DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx.region.aws.neon.tech/amplify_dev?sslmode=require
 
 # MongoDB Atlas
@@ -66,11 +86,6 @@ TAVILY_API_KEY=tvly-…
 # Observability
 LANGSMITH_API_KEY=ls-…
 LANGSMITH_PROJECT=amplify-dev
-
-# Next.js ↔ FastAPI
-FASTAPI_INTERNAL_URL=http://localhost:8000
-BETTER_AUTH_SECRET=dev-secret-change-me
-BETTER_AUTH_URL=http://localhost:3000
 ```
 
 ---
@@ -78,17 +93,22 @@ BETTER_AUTH_URL=http://localhost:3000
 ## 3. Install and migrate
 
 ```bash
-# Backend
-cd apps/api
+# Frontend — owns the canonical Prisma schema and migration history
+cd apps/web
+pnpm install
+pnpm prisma migrate dev --name research_agent_models
+pnpm prisma generate
+
+# Backend — mirrors the schema (generator swapped to prisma-client-py)
+# and ONLY runs `prisma generate`. Never run `migrate dev` from here.
+cd ../api
 uv sync
 uv run prisma generate
-uv run prisma migrate dev --name init_research_agent
-
-# Frontend
-cd ../web
-pnpm install
-pnpm prisma generate   # same Prisma schema
 ```
+
+Prisma lives in both apps. `apps/web/prisma/schema.prisma` is the single
+source of truth; `apps/api/db/prisma/schema.prisma` is a hand-kept mirror
+whose only diff is the `generator client` block.
 
 This creates the Postgres tables: `User`, `Session`, `Conversation`,
 `Message`, `ResearchRequest`, `FailureRecord`, plus LangGraph's own checkpoint
