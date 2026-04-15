@@ -187,27 +187,27 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 ### Backend: Failure taxonomy and persistence
 
-- [ ] T070 [US3] Implement `apps/api/services/failures.py` exposing `record_failure(user_id, conversation_id, code, user_message, suggested_action, trace_id) -> FailureRecord`; persists via Prisma and returns a Pydantic model ready for SSE emission
-- [ ] T071 [US3] Catch each failure case in `apps/api/agents/research.py` and `apps/api/routers/chat.py` and route to `record_failure` with the correct `FailureCode`: `tavily_unavailable`, `tavily_rate_limited`, `llm_unavailable`, `llm_invalid_output`, `no_findings_above_threshold`, `budget_exceeded`, `user_cancelled`, `rate_limited_user`
-- [ ] T072 [US3] In `apps/api/sse/transform.py`, ensure every caught failure is emitted as exactly one `error` SSE event with `recoverable`, `message`, `suggested_action`, and `failure_record_id`; on an `error`, the stream terminates WITHOUT a subsequent `done` per contracts/sse-events.md sequencing rules
-- [ ] T073 [US3] Enforce Constitution V invariant in `record_failure`: reject empty or generic `user_message` at runtime (raise in dev, log-and-substitute an explicit "no-op failure of X" message in prod) so no silent/generic message can reach the user
-- [ ] T074 [P] [US3] Enforce the no-findings-above-threshold path in `agents/research.py`: when the anti-hallucination gate leaves zero qualifying findings, do NOT persist a brief; emit `no_findings_above_threshold` failure with a rephrase suggestion (covers FR-027)
-- [ ] T075 [P] [US3] Enforce paywalled/blocked source disclosure: when the Tavily tool marks a result as `accessible == False`, surface this in the parent `Finding.notes` and keep the source cited per FR-028 and intelligence-brief.md invariant 6
+- [X] T070 [US3] Implement `apps/api/services/failures.py` exposing `record_failure(user_id, conversation_id, code, user_message, suggested_action, trace_id) -> FailureRecord`; persists via Prisma and returns a Pydantic model ready for SSE emission
+- [X] T071 [US3] Catch each failure case in `apps/api/agents/research.py` and `apps/api/routers/chat.py` and route to `record_failure` with the correct `FailureCode`: `tavily_unavailable`, `tavily_rate_limited`, `llm_unavailable`, `llm_invalid_output`, `no_findings_above_threshold`, `budget_exceeded`, `user_cancelled`, `rate_limited_user`
+- [X] T072 [US3] In `apps/api/sse/transform.py`, ensure every caught failure is emitted as exactly one `error` SSE event with `recoverable`, `message`, `suggested_action`, and `failure_record_id`; on an `error`, the stream terminates WITHOUT a subsequent `done` per contracts/sse-events.md sequencing rules
+- [X] T073 [US3] Enforce Constitution V invariant in `record_failure`: reject empty or generic `user_message` at runtime (raise in dev, log-and-substitute an explicit "no-op failure of X" message in prod) so no silent/generic message can reach the user
+- [X] T074 [P] [US3] Enforce the no-findings-above-threshold path in `agents/research.py`: when the anti-hallucination gate leaves zero qualifying findings, do NOT persist a brief; emit `no_findings_above_threshold` failure with a rephrase suggestion (covers FR-027)
+- [X] T075 [P] [US3] Enforce paywalled/blocked source disclosure: when the Tavily tool marks a result as `accessible == False`, surface this in the parent `Finding.notes` and keep the source cited per FR-028 and intelligence-brief.md invariant 6
 
 ### Frontend: Failure rendering
 
-- [ ] T076 [P] [US3] Build `apps/web/components/chat/failure-card.tsx` — renders an `error` SSE event as a distinct in-conversation card with the failure message, a "Retry" button (only when `recoverable`), and the `suggested_action` text; "Retry" re-posts the original user message
-- [ ] T077 [P] [US3] Extend `apps/web/components/chat/stream-renderer.tsx` to route `error` events to `<FailureCard />`; extend the conversation reload path to render persisted failure records identically
+- [X] T076 [P] [US3] Build `apps/web/components/chat/failure-card.tsx` — renders an `error` SSE event as a distinct in-conversation card with the failure message, a "Retry" button (only when `recoverable`), and the `suggested_action` text; "Retry" re-posts the original user message
+- [X] T077 [P] [US3] Extend `apps/web/components/chat/stream-renderer.tsx` to route `error` events to `<FailureCard />`; extend the conversation reload path to render persisted failure records identically
 
 ### Tests for User Story 3 (the full failure matrix — critical for SC-006)
 
-- [ ] T078 [P] [US3] Add `apps/api/tests/integration/test_failure_tavily_unavailable.py`: Tavily fixture returns 503; asserts a single `error` event with `code=tavily_unavailable, recoverable=true`, a non-empty `suggested_action`, and a persisted `FailureRecord`
-- [ ] T079 [P] [US3] Add `apps/api/tests/integration/test_failure_llm_invalid_output.py`: LLM fake returns unparseable JSON thrice; asserts a single `error` event with `code=llm_invalid_output, recoverable=false`
-- [ ] T080 [P] [US3] Add `apps/api/tests/integration/test_failure_no_findings.py`: Tavily fixture returns empty/irrelevant results; asserts `no_findings_above_threshold` error — and crucially, that no `IntelligenceBrief` document is written to MongoDB
-- [ ] T081 [P] [US3] Add `apps/api/tests/integration/test_failure_budget_exceeded.py`: config override drops `RESEARCH_BUDGET_SECONDS` to 1; asserts `budget_exceeded` error
-- [ ] T082 [P] [US3] Add `apps/api/tests/integration/test_failure_rate_limited.py`: 11 back-to-back research requests from one user; asserts the 11th returns `429` with `rate_limited_user`
-- [ ] T083 [P] [US3] Add `apps/api/tests/unit/test_zero_silent_failures.py`: parametrized over every `FailureCode`, asserts `record_failure` rejects empty/generic `user_message` strings
-- [ ] T084 [P] [US3] Add `apps/web/tests/e2e/failure-visibility.spec.ts` (Playwright): intercepts the SSE stream to inject a `tavily_unavailable` error event, asserts the `<FailureCard />` renders with the correct message, the Retry button is visible, and clicking Retry re-submits the original question
+- [X] T078 [P] [US3] Add `apps/api/tests/integration/test_failure_tavily_unavailable.py`: Tavily fixture returns 503; asserts a single `error` event with `code=tavily_unavailable, recoverable=true`, a non-empty `suggested_action`, and a persisted `FailureRecord`
+- [X] T079 [P] [US3] Add `apps/api/tests/integration/test_failure_llm_invalid_output.py`: LLM fake returns unparseable JSON thrice; asserts a single `error` event with `code=llm_invalid_output, recoverable=false`
+- [X] T080 [P] [US3] Add `apps/api/tests/integration/test_failure_no_findings.py`: Tavily fixture returns empty/irrelevant results; asserts `no_findings_above_threshold` error — and crucially, that no `IntelligenceBrief` document is written to MongoDB
+- [X] T081 [P] [US3] Add `apps/api/tests/integration/test_failure_budget_exceeded.py`: config override drops `RESEARCH_BUDGET_SECONDS` to 1; asserts `budget_exceeded` error
+- [X] T082 [P] [US3] Add `apps/api/tests/integration/test_failure_rate_limited.py`: 11 back-to-back research requests from one user; asserts the 11th returns `429` with `rate_limited_user`
+- [X] T083 [P] [US3] Add `apps/api/tests/unit/test_zero_silent_failures.py`: parametrized over every `FailureCode`, asserts `record_failure` rejects empty/generic `user_message` strings
+- [X] T084 [P] [US3] Add `apps/web/tests/e2e/failure-visibility.spec.ts` (Playwright): intercepts the SSE stream to inject a `tavily_unavailable` error event, asserts the `<FailureCard />` renders with the correct message, the Retry button is visible, and clicking Retry re-submits the original question
 
 **Checkpoint**: Every failure path is observable, specific, and persistent. SC-006 (100% of failures surface an actionable message; zero silent failures) is testable and enforced.
 

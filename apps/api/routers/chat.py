@@ -13,7 +13,6 @@ The SSE handler owns the lifecycle of a single research interaction:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -32,7 +31,7 @@ from models.research import IntelligenceBrief
 from services import resume_bus
 from services.brief_store import BriefStore
 from services.conversation_store import ConversationStore
-from services.failures import build_failure_record, persist_failure_record
+from services.failures import build_failure_record, record_failure
 from services.rate_limit import RateLimited, RateLimiter
 from sse.events import (
     ConversationReady,
@@ -322,18 +321,45 @@ async def chat_stream(
                 ),
             )
 
-        except Exception as exc:
-            code = _exception_to_failure_code(exc)
+        except asyncio.CancelledError:
+            code = FailureCode.user_cancelled
             message, suggestion = _error_text(code)
-            record = build_failure_record(
+            record = await record_failure(
+                conversations=conversations,
+                prisma=getattr(request.app.state, "prisma", None),
+                user_id=user_id,
+                conversation_id=conversation_id,
                 code=code,
                 user_message=message,
                 suggested_action=suggestion,
+                progress_events=progress_trail,
             )
-            with contextlib.suppress(Exception):
-                await persist_failure_record(
-                    prisma=getattr(request.app.state, "prisma", None), record=record
-                )
+            yield await _emit(
+                alloc,
+                ErrorEvent(
+                    conversation_id=conversation_id,
+                    at=_now(),
+                    code=code.value,  # type: ignore[arg-type]
+                    message=message,
+                    recoverable=record.recoverable,
+                    suggested_action=suggestion,
+                    failure_record_id=record.id,
+                ),
+            )
+            raise
+        except Exception as exc:
+            code = _exception_to_failure_code(exc)
+            message, suggestion = _error_text(code)
+            record = await record_failure(
+                conversations=conversations,
+                prisma=getattr(request.app.state, "prisma", None),
+                user_id=user_id,
+                conversation_id=conversation_id,
+                code=code,
+                user_message=message,
+                suggested_action=suggestion,
+                progress_events=progress_trail,
+            )
             yield await _emit(
                 alloc,
                 ErrorEvent(

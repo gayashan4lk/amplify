@@ -254,6 +254,41 @@ def _filter_fabricated(
     return brief.model_copy(update={"findings": kept, "status": status})
 
 
+BLOCKED_NOTE_PREFIX = "Some cited sources are paywalled or access-blocked:"
+
+
+def _annotate_inaccessible(
+    brief: IntelligenceBrief, inaccessible_urls: set[str]
+) -> IntelligenceBrief:
+    """Surface blocked/paywalled sources in `notes` per FR-028.
+
+    Preserves the citation (we still cite the URL) but flags the access
+    issue so the UI can render the disclosure required by invariant 6.
+    """
+    if not inaccessible_urls:
+        return brief
+    updated: list[Finding] = []
+    for f in brief.findings:
+        blocked = [
+            str(s.url) for s in f.sources if str(s.url).rstrip("/") in inaccessible_urls
+        ]
+        if not blocked:
+            updated.append(f)
+            continue
+        addition = f"{BLOCKED_NOTE_PREFIX} {', '.join(blocked)}"
+        merged = (
+            f"{f.notes.rstrip('.')}. {addition}"
+            if f.notes
+            else addition
+        )
+        merged = _truncate(merged, NOTES_MAX)
+        try:
+            updated.append(f.model_copy(update={"notes": merged}))
+        except Exception:
+            updated.append(f)
+    return brief.model_copy(update={"findings": updated})
+
+
 async def _run_searches(
     plan: ResearchPlan,
     *,
@@ -271,6 +306,7 @@ async def _run_searches(
                 "url": r.url,
                 "content": r.content,
                 "source_type": r.source_type,
+                "accessible": r.accessible,
             }
             for r in results
         ]
@@ -335,6 +371,12 @@ async def _research_body(state: dict[str, Any]) -> dict[str, Any]:
         {"phase": "validating", "message": "Verifying source attributions"},
     )
     verified = _filter_fabricated(brief, research_request_id=research_request_id)
+    inaccessible = {
+        (s.get("url") or "").rstrip("/")
+        for s in snippets
+        if s.get("accessible") is False and s.get("url")
+    }
+    verified = _annotate_inaccessible(verified, inaccessible)
     verified = verified.model_copy(
         update={
             "user_id": user_id,

@@ -38,6 +38,7 @@ class TavilyResult:
     content: str
     score: float | None = None
     source_type: str = "other"
+    accessible: bool = True
 
 
 def _normalize(query: str) -> str:
@@ -111,6 +112,7 @@ class TavilyTool:
                 content=r.get("content", "") or r.get("snippet", ""),
                 score=r.get("score"),
                 source_type=_classify(r.get("url", "")),
+                accessible=bool(r.get("accessible", True)),
             )
             for r in raw
             if r.get("url")

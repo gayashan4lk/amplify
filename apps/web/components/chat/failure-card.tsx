@@ -1,16 +1,26 @@
-// T076 (Phase 5) also uses this. Imported from message-list so failures render
-// in Phase 3 streams too — the full Retry wiring arrives in Phase 5.
+// T076: renders an `error` SSE event / persisted FailureRecord as a distinct
+// in-conversation card. When `recoverable` and an `onRetry` handler is
+// supplied, a Retry button re-submits the original user message.
 
 'use client'
+
+import { Button } from '@/components/ui/button'
 
 type Props = {
 	code: string
 	message: string
 	recoverable: boolean
 	suggestedAction?: string | null
+	onRetry?: () => void
 }
 
-export default function FailureCard({ code, message, recoverable, suggestedAction }: Props) {
+export default function FailureCard({
+	code,
+	message,
+	recoverable,
+	suggestedAction,
+	onRetry,
+}: Props) {
 	return (
 		<div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm">
 			<div className="text-xs font-semibold uppercase tracking-wide text-red-700">
@@ -20,8 +30,18 @@ export default function FailureCard({ code, message, recoverable, suggestedActio
 			{suggestedAction && (
 				<p className="mt-2 text-xs text-red-800">{suggestedAction}</p>
 			)}
-			{recoverable && (
-				<div className="mt-2 text-xs text-red-700">Recoverable — retry available.</div>
+			{recoverable && onRetry && (
+				<div className="mt-3">
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						onClick={onRetry}
+						data-testid="failure-retry"
+					>
+						Retry
+					</Button>
+				</div>
 			)}
 		</div>
 	)

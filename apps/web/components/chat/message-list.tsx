@@ -8,9 +8,31 @@ import ClarificationPoll from '@/components/ephemeral/clarification-poll'
 import IntelligenceBrief from '@/components/ephemeral/intelligence-brief'
 import FailureCard from '@/components/chat/failure-card'
 import { useChatStore } from '@/lib/stores/chat-store'
+import { SseClient } from '@/lib/sse-client'
+import type { SseEvent } from '@/lib/types/sse-events'
 
 export default function MessageList() {
 	const messages = useChatStore((s) => s.messages)
+	const conversationId = useChatStore((s) => s.conversationId)
+	const addUserMessage = useChatStore((s) => s.addUserMessage)
+	const applyEvent = useChatStore((s) => s.applyEvent)
+
+	const lastUserMessage = [...messages]
+		.reverse()
+		.find((m): m is Extract<typeof messages[number], { kind: 'user' }> => m.kind === 'user')
+
+	function handleRetry() {
+		if (!lastUserMessage) return
+		const content = lastUserMessage.content
+		addUserMessage(content)
+		const qs = new URLSearchParams({ message: content })
+		if (conversationId) qs.set('conversation_id', conversationId)
+		const client = new SseClient({
+			url: `/api/chat/stream?${qs.toString()}`,
+			onEvent: (id, ev: SseEvent) => applyEvent(id, ev),
+		})
+		client.start()
+	}
 
 	return (
 		<ol className="flex flex-col gap-4">
@@ -54,6 +76,7 @@ export default function MessageList() {
 									message={m.message}
 									recoverable={m.recoverable}
 									suggestedAction={m.suggested_action ?? null}
+									onRetry={lastUserMessage ? handleRetry : undefined}
 								/>
 							</li>
 						)

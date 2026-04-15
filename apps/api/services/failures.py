@@ -1,18 +1,25 @@
-"""Minimal failure recording helper used by Phase 3 error paths.
+"""Failure recording helper.
 
-Phase 5 (T070) extends this with full Prisma persistence. For Phase 3 we only
-need the in-memory construction of a FailureRecord Pydantic model so the SSE
-error event can reference it. Callers pass a Prisma client when available.
+`build_failure_record` constructs a Pydantic FailureRecord and enforces the
+Constitution V invariant (no silent/generic failures at runtime).
+`persist_failure_record` writes it to Prisma best-effort.
+`record_failure` (T070) is the unified entry point the routing layer uses:
+it constructs, persists, and optionally appends an assistant Message row
+linking to the failure so reloading the conversation renders the failure in
+place.
 """
 
 from __future__ import annotations
 
 import contextlib
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 from models.errors import FailureCode, FailureRecord
+
+log = logging.getLogger(__name__)
 
 _GENERIC = {"", "something went wrong", "an error occurred", "unknown error", "error"}
 
@@ -64,3 +71,46 @@ async def persist_failure_record(
                 "traceId": record.trace_id,
             }
         )
+
+
+async def record_failure(
+    *,
+    conversations: Any | None,
+    prisma: Any | None,
+    user_id: str,
+    conversation_id: str,
+    code: FailureCode,
+    user_message: str,
+    suggested_action: str | None = None,
+    trace_id: str | None = None,
+    recoverable: bool | None = None,
+    progress_events: list[dict[str, Any]] | None = None,
+) -> FailureRecord:
+    """Build + persist a FailureRecord and append an assistant failure Message.
+
+    Enforces Constitution V: `build_failure_record` rejects empty/generic
+    `user_message` values. Returns the Pydantic model ready for SSE emission.
+    Message append is best-effort — persistence failures never block the
+    error event reaching the user.
+    """
+
+    record = build_failure_record(
+        code=code,
+        user_message=user_message,
+        suggested_action=suggested_action,
+        trace_id=trace_id,
+        recoverable=recoverable,
+    )
+    await persist_failure_record(prisma=prisma, record=record)
+
+    if conversations is not None and conversation_id:
+        with contextlib.suppress(Exception):  # pragma: no cover — best-effort
+            await conversations.append_message(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                role="assistant",
+                content=record.user_message,
+                failure_record_id=record.id,
+                progress_events=progress_events,
+            )
+    return record
