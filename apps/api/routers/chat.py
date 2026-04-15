@@ -344,6 +344,7 @@ async def chat_stream(
                     recoverable=record.recoverable,
                     suggested_action=suggestion,
                     failure_record_id=record.id,
+                    trace_id=record.trace_id,
                 ),
             )
             raise
@@ -370,6 +371,7 @@ async def chat_stream(
                     recoverable=record.recoverable,
                     suggested_action=suggestion,
                     failure_record_id=record.id,
+                    trace_id=record.trace_id,
                 ),
             )
 

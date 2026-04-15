@@ -217,11 +217,11 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 
 **Purpose**: Harden the slice, finalize observability, and prepare for deployment.
 
-- [ ] T085 [P] Wire LangSmith trace id into every Pydantic model that reaches the frontend (`IntelligenceBrief.trace_id`, `FailureRecord.traceId`) and render a small dev-only "view trace" link on finding cards and failure cards when `NODE_ENV !== "production"`
-- [ ] T086 [P] Add `apps/api/tests/unit/test_source_confidence_rules.py` covering intelligence-brief.md invariant 3 (high-confidence requires 2+ sources OR 1 strong source type) across a parametrized matrix
-- [ ] T087 [P] Add a nightly LangSmith eval job config (docs only for now, no CI wiring) that runs a hand-curated set of 10 research questions and scores each brief against: zero fabricated sources, ≥3 findings, at least one high-confidence finding (per research.md R-013)
-- [ ] T088 Add a Railway deployment config at `railway.toml` covering two services (`web` for `apps/web`, `api` for `apps/api`) with the API listening only on Railway's private network per ADR-006 / Constitution Technology & Security Constraints
-- [ ] T089 [P] Update `README.md` at repo root with a short summary and a link to `specs/001-research-agent/quickstart.md`
+- [X] T085 [P] Wire LangSmith trace id into every Pydantic model that reaches the frontend (`IntelligenceBrief.trace_id`, `FailureRecord.traceId`) and render a small dev-only "view trace" link on finding cards and failure cards when `NODE_ENV !== "production"`
+- [X] T086 [P] Add `apps/api/tests/unit/test_source_confidence_rules.py` covering intelligence-brief.md invariant 3 (high-confidence requires 2+ sources OR 1 strong source type) across a parametrized matrix
+- [X] T087 [P] Add a nightly LangSmith eval job config (docs only for now, no CI wiring) that runs a hand-curated set of 10 research questions and scores each brief against: zero fabricated sources, ≥3 findings, at least one high-confidence finding (per research.md R-013)
+- [X] T088 Add a Railway deployment config at `railway.toml` covering two services (`web` for `apps/web`, `api` for `apps/api`) with the API listening only on Railway's private network per ADR-006 / Constitution Technology & Security Constraints
+- [X] T089 [P] Update `README.md` at repo root with a short summary and a link to `specs/001-research-agent/quickstart.md`
 - [ ] T090 [P] Run the full quickstart.md walkthrough manually on a clean clone and fix any gap between the quickstart and the actual setup; sign off when happy-path, clarification-path, and all failure paths work end-to-end
 
 ---

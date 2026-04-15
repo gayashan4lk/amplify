@@ -32,6 +32,10 @@ def build_failure_record(
     trace_id: str | None = None,
     recoverable: bool | None = None,
 ) -> FailureRecord:
+    if trace_id is None:
+        from services.tracing import get_current_trace_id
+
+        trace_id = get_current_trace_id()
     if user_message.strip().lower() in _GENERIC:
         raise ValueError("user_message must be specific — no generic fallbacks")
     if recoverable is None:

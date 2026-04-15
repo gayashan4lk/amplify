@@ -179,7 +179,8 @@ of these — never silent.
   "message": "Our search provider is temporarily unreachable.",
   "recoverable": true,
   "suggested_action": "Try again in a minute.",
-  "failure_record_id": "cuid"
+  "failure_record_id": "cuid",
+  "trace_id": "ls_abc123"
 }
 ```
 
@@ -188,6 +189,9 @@ of these — never silent.
 - `recoverable: true` requires `suggested_action` to be set.
 - `failure_record_id` references a persisted `FailureRecord` that will also be
   visible on conversation reload.
+- `trace_id` is optional and carries the LangSmith trace id when tracing is
+  active; surfaced as a dev-only "view trace" link on the frontend
+  (T085). Never present in production-mode UI.
 
 ### `done`
 

@@ -136,6 +136,7 @@ const ErrorSchema = BaseEvent.extend({
 	recoverable: z.boolean(),
 	suggested_action: z.string().nullable().optional(),
 	failure_record_id: z.string(),
+	trace_id: z.string().nullable().optional(),
 })
 
 const DoneSchema = BaseEvent.extend({

@@ -103,6 +103,7 @@ class ErrorEvent(_EventBase):
     recoverable: bool
     suggested_action: str | None = None
     failure_record_id: str
+    trace_id: str | None = None
 
 
 class Done(_EventBase):

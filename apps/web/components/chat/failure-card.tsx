@@ -6,11 +6,14 @@
 
 import { Button } from '@/components/ui/button'
 
+import { TraceLink } from '@/components/dev/trace-link'
+
 type Props = {
 	code: string
 	message: string
 	recoverable: boolean
 	suggestedAction?: string | null
+	traceId?: string | null
 	onRetry?: () => void
 }
 
@@ -19,6 +22,7 @@ export default function FailureCard({
 	message,
 	recoverable,
 	suggestedAction,
+	traceId,
 	onRetry,
 }: Props) {
 	return (
@@ -30,6 +34,7 @@ export default function FailureCard({
 			{suggestedAction && (
 				<p className="mt-2 text-xs text-red-800">{suggestedAction}</p>
 			)}
+			<TraceLink traceId={traceId} className="mt-2" />
 			{recoverable && onRetry && (
 				<div className="mt-3">
 					<Button

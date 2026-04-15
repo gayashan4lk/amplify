@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 
+import { TraceLink } from '@/components/dev/trace-link'
 import type { IntelligenceBrief } from '@/lib/types/sse-events'
 
 type Props = { brief: IntelligenceBrief }
@@ -55,14 +56,20 @@ export default function IntelligenceBriefComponent({ brief }: Props) {
 
 			<ol className="flex flex-col gap-3">
 				{brief.findings.map((f) => (
-					<FindingCard key={f.id} finding={f} />
+					<FindingCard key={f.id} finding={f} traceId={brief.trace_id ?? null} />
 				))}
 			</ol>
 		</div>
 	)
 }
 
-function FindingCard({ finding }: { finding: IntelligenceBrief['findings'][number] }) {
+function FindingCard({
+	finding,
+	traceId,
+}: {
+	finding: IntelligenceBrief['findings'][number]
+	traceId: string | null
+}) {
 	const [expanded, setExpanded] = useState(false)
 	return (
 		<li className="rounded-md border p-4">
@@ -93,15 +100,18 @@ function FindingCard({ finding }: { finding: IntelligenceBrief['findings'][numbe
 			{finding.notes && (
 				<p className="mt-2 text-xs italic text-muted-foreground">{finding.notes}</p>
 			)}
-			<button
-				type="button"
-				className="mt-2 text-xs text-blue-600 underline"
-				onClick={() => setExpanded((e) => !e)}
-			>
-				{expanded
-					? 'Hide sources'
-					: `Show sources (${finding.sources.length})`}
-			</button>
+			<div className="mt-2 flex items-center gap-3">
+				<button
+					type="button"
+					className="text-xs text-blue-600 underline"
+					onClick={() => setExpanded((e) => !e)}
+				>
+					{expanded
+						? 'Hide sources'
+						: `Show sources (${finding.sources.length})`}
+				</button>
+				<TraceLink traceId={traceId} />
+			</div>
 			{expanded && (
 				<ul className="mt-2 flex flex-col gap-1 text-xs">
 					{finding.sources.map((s) => (

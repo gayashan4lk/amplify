@@ -33,6 +33,7 @@ export type StoredMessage =
 			recoverable: boolean
 			suggested_action?: string | null
 			failure_record_id: string
+			trace_id?: string | null
 	  }
 
 export type StreamState = {
@@ -177,6 +178,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 							recoverable: ev.recoverable,
 							suggested_action: ev.suggested_action ?? null,
 							failure_record_id: ev.failure_record_id,
+							trace_id: ev.trace_id ?? null,
 						},
 					],
 					stream: emptyStream(),

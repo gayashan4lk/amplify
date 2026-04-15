@@ -30,6 +30,7 @@ EVIDENCE_MAX = 1200
 NOTES_MAX = 500
 UNSOURCED_DEFAULT_NOTE = "Evidence not supported by any verified source."
 from services.llm_router import get_llm
+from services.tracing import get_current_trace_id as _current_trace_id
 from tools.tavily_search import TavilyTool, get_registered_urls, reset_registry
 
 log = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ def _normalize_raw_brief(
         findings=kept,
         generated_at=getattr(raw, "generated_at", None) or datetime.now(UTC),
         model_used=getattr(raw, "model_used", None) or "unknown",
-        trace_id=getattr(raw, "trace_id", None),
+        trace_id=getattr(raw, "trace_id", None) or _current_trace_id(),
     )
 
 

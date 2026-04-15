@@ -76,6 +76,7 @@ export default function MessageList() {
 									message={m.message}
 									recoverable={m.recoverable}
 									suggestedAction={m.suggested_action ?? null}
+									traceId={m.trace_id ?? null}
 									onRetry={lastUserMessage ? handleRetry : undefined}
 								/>
 							</li>
