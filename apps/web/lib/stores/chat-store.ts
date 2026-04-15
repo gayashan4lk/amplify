@@ -82,6 +82,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 				...s.messages,
 				{ kind: 'user', id: `u_${Date.now()}`, content },
 			],
+			// Each new user message kicks off a fresh SSE stream whose event ids
+			// restart at 1. Clear the seen-id set so those ids don't collide with
+			// the previous stream's and get dropped as duplicates.
+			seenEventIds: new Set<string>(),
+			stream: emptyStream(),
 		})),
 
 	applyEvent: (eventId, ev) => {
@@ -149,20 +154,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
 						prompt: string
 						options: string[]
 					}
-					set({
-						messages: [
-							...state.messages,
-							{
-								kind: 'assistant_clarification',
-								id: ev.message_id,
-								research_request_id: component.research_request_id,
-								prompt: component.prompt,
-								options: component.options,
-								answered: false,
-							},
-						],
-						seenEventIds: seen,
-					})
+					// LangGraph re-runs the clarification node on resume, so the
+					// same clarification_poll custom event is dispatched twice
+					// within one SSE stream. Drop the duplicate here so the UI
+					// only ever renders one poll per research_request_id.
+					const alreadyPresent = state.messages.some(
+						(m) =>
+							m.kind === 'assistant_clarification' &&
+							m.research_request_id === component.research_request_id,
+					)
+					if (alreadyPresent) {
+						set({ seenEventIds: seen })
+					} else {
+						set({
+							messages: [
+								...state.messages,
+								{
+									kind: 'assistant_clarification',
+									id: ev.message_id,
+									research_request_id: component.research_request_id,
+									prompt: component.prompt,
+									options: component.options,
+									answered: false,
+								},
+							],
+							seenEventIds: seen,
+						})
+					}
 				}
 				return
 			}

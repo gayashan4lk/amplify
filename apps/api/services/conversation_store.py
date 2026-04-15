@@ -93,15 +93,19 @@ class ConversationStore:
     ) -> Any | None:
         if not await self.get_conversation(conversation_id=conversation_id, user_id=user_id):
             return None
+        from prisma import Json  # type: ignore[import-not-found]
+
         data: dict[str, Any] = {
-            "conversationId": conversation_id,
+            "conversation": {"connect": {"id": conversation_id}},
             "role": role,
             "content": content,
-            "briefId": brief_id,
-            "failureRecordId": failure_record_id,
         }
+        if brief_id is not None:
+            data["briefId"] = brief_id
+        if failure_record_id is not None:
+            data["failureRecord"] = {"connect": {"id": failure_record_id}}
         if progress_events is not None:
-            data["progressEvents"] = progress_events
+            data["progressEvents"] = Json(progress_events)
         created = await self._prisma.message.create(data=data)
         # Touch the parent conversation so `updatedAt` reflects the last
         # activity — Prisma's `@updatedAt` only fires on a direct update.

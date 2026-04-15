@@ -17,8 +17,13 @@ from middleware.auth import UserIdMiddleware
 from routers import chat as chat_router
 from routers import conversations as conv_router
 
-log = logging.getLogger("amplify.api")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logging.getLogger("routers.chat").setLevel(logging.INFO)
 
+log = logging.getLogger("amplify.api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

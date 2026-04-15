@@ -234,20 +234,24 @@ async def chat_stream(
             decision = final_values.get("supervisor_decision") or {}
             route = decision.get("route")
             brief_state = final_values.get("brief")
+            log.info(
+                "supervisor routed message to %r (explanation=%r)",
+                route,
+                decision.get("explanation"),
+            )
 
             # followup_on_existing_brief → stream a text answer grounded in the prior brief
             if route == "followup_on_existing_brief" and prior_brief_model is not None:
-                answer = _followup_text_response(prior_brief_model, body.message)
-                for token in answer.split(" "):
-                    yield await _emit(
-                        alloc,
-                        TextDelta(
-                            conversation_id=conversation_id,
-                            at=_now(),
-                            message_id=assistant_message_id,
-                            delta=token + " ",
-                        ),
-                    )
+                answer = await _followup_text_response(prior_brief_model, body.message)
+                yield await _emit(
+                    alloc,
+                    TextDelta(
+                        conversation_id=conversation_id,
+                        at=_now(),
+                        message_id=assistant_message_id,
+                        delta=answer,
+                    ),
+                )
                 await conversations.append_message(
                     conversation_id=conversation_id,
                     user_id=user_id,
@@ -310,14 +314,40 @@ async def chat_stream(
                 )
                 return
 
-            # out_of_scope / default
+            # out_of_scope / default — stream a short visible text response so
+            # the user always sees *something* instead of an empty assistant
+            # turn. Constitution V: no silent failures, and an empty reply is
+            # effectively a silent failure from the user's perspective.
+            fallback = (
+                "I'm set up to answer research questions about markets, "
+                "competitors, audiences, pricing, and channels. Try a scoped "
+                "question — e.g. 'What pricing tiers are the top 5 CRM "
+                "competitors using?' — and I'll pull sources and synthesize a "
+                "brief."
+            )
+            yield await _emit(
+                alloc,
+                TextDelta(
+                    conversation_id=conversation_id,
+                    at=_now(),
+                    message_id=assistant_message_id,
+                    delta=fallback,
+                ),
+            )
+            await conversations.append_message(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                role="assistant",
+                content=fallback,
+                progress_events=progress_trail,
+            )
             yield await _emit(
                 alloc,
                 Done(
                     conversation_id=conversation_id,
                     at=_now(),
                     final_status="text_only",
-                    summary=decision.get("explanation") or "no research run",
+                    summary=decision.get("explanation") or "out of scope",
                 ),
             )
 
@@ -349,6 +379,7 @@ async def chat_stream(
             )
             raise
         except Exception as exc:
+            log.exception("chat stream failed with unhandled exception: %r", exc)
             code = _exception_to_failure_code(exc)
             message, suggestion = _error_text(code)
             record = await record_failure(
@@ -573,11 +604,45 @@ def _error_text(code: FailureCode) -> tuple[str, str | None]:
     return mapping[code]
 
 
-def _followup_text_response(brief: IntelligenceBrief, question: str) -> str:
-    # Deterministic text response grounded in the stored brief — no re-research.
+async def _followup_text_response(brief: IntelligenceBrief, question: str) -> str:
+    """LLM-grounded follow-up answer. Reads the full brief and the user's
+    question and answers in plain prose. No web research — the brief is the
+    only source of truth. Falls back to a deterministic summary if the LLM
+    call fails so the user always sees something.
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from services.llm_router import get_llm
+
+    findings_block = "\n\n".join(
+        f"Finding #{f.rank} ({f.confidence} confidence): {f.claim}\nEvidence: {f.evidence}"
+        + (f"\nNotes: {f.notes}" if f.notes else "")
+        for f in brief.findings
+    )
+    system = (
+        "You are answering a follow-up question about a previously delivered "
+        "intelligence brief. Use ONLY the findings listed below — do not invent "
+        "facts or cite sources that are not in the brief. If the user refers to "
+        "a specific finding by number or position (e.g. 'the second finding'), "
+        "answer about that finding. Keep the response under 180 words."
+    )
+    user = (
+        f"Original question: {brief.scoped_question}\n\n"
+        f"Brief findings:\n{findings_block}\n\n"
+        f"Follow-up: {question}"
+    )
+    try:
+        resp = await get_llm("research_synthesize").ainvoke(
+            [SystemMessage(content=system), HumanMessage(content=user)]
+        )
+        content = getattr(resp, "content", None)
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+    except Exception:  # pragma: no cover — best-effort; fall through
+        log.exception("followup llm call failed; using deterministic fallback")
     first = brief.findings[0]
     return (
-        f"Based on the prior brief on '{brief.scoped_question}', here is more detail: "
+        f"Based on the prior brief on '{brief.scoped_question}': "
         f"{first.claim} — {first.evidence[:200]}"
     )
 
