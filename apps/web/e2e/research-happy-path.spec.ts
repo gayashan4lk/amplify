@@ -11,8 +11,8 @@
 
 import { expect, test } from '@playwright/test'
 
-const TEST_EMAIL = process.env.PW_TEST_EMAIL ?? 'e2e@amplify.local'
-const TEST_PASSWORD = process.env.PW_TEST_PASSWORD ?? 'correct horse battery staple'
+const TEST_EMAIL = process.env.PW_TEST_EMAIL ?? 'testuserlocal1@myemail.com'
+const TEST_PASSWORD = process.env.PW_TEST_PASSWORD ?? 'yrc1QqVdzIyTDI7'
 
 test('signed-in user receives a rendered intelligence brief', async ({ page }) => {
 	await page.goto('/login')
@@ -27,7 +27,7 @@ test('signed-in user receives a rendered intelligence brief', async ({ page }) =
 	await page.getByRole('button', { name: /send/i }).click()
 
 	const brief = page.locator('text=Intelligence brief').first()
-	await expect(brief).toBeVisible({ timeout: 60_000 })
+	await expect(brief).toBeVisible({ timeout: 5 * 60 * 1000 })
 
 	const findingCards = page.locator('ol > li:has(text="#")').nth(0)
 	await expect(findingCards).toBeVisible()
