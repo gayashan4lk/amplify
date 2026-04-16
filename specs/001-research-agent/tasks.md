@@ -222,7 +222,7 @@ Monorepo: backend at `apps/api/`, frontend at `apps/web/`, spec docs at `specs/0
 - [X] T087 [P] Add a nightly LangSmith eval job config (docs only for now, no CI wiring) that runs a hand-curated set of 10 research questions and scores each brief against: zero fabricated sources, ≥3 findings, at least one high-confidence finding (per research.md R-013)
 - [X] T088 Add a Railway deployment config at `railway.toml` covering two services (`web` for `apps/web`, `api` for `apps/api`) with the API listening only on Railway's private network per ADR-006 / Constitution Technology & Security Constraints
 - [X] T089 [P] Update `README.md` at repo root with a short summary and a link to `specs/001-research-agent/quickstart.md`
-- [ ] T090 [P] Run the full quickstart.md walkthrough manually on a clean clone and fix any gap between the quickstart and the actual setup; sign off when happy-path, clarification-path, and all failure paths work end-to-end
+- [X] T090 [P] Run the full quickstart.md walkthrough manually on a clean clone and fix any gap between the quickstart and the actual setup; sign off when happy-path, clarification-path, and all failure paths work end-to-end
 
 ---
 
