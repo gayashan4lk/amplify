@@ -155,7 +155,7 @@ The following constraints are binding. Deviations require an ADR and a
 constitution amendment.
 
 **Stack (per SAD v1.1 and ADRs):**
-- Frontend: Next.js 15 App Router, Tailwind 4, Shadcn/ui, Zustand for client state,
+- Frontend: Next.js 16 App Router, Tailwind 4, Shadcn/ui, Zustand for client state,
   Next.js native features for server state (no TanStack Query unless justified).
 - Backend: FastAPI (async), LangGraph for orchestration, Prisma (prisma-client-py)
   for Postgres, Motor for MongoDB, ARQ for background jobs.

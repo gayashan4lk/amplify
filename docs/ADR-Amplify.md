@@ -1,7 +1,7 @@
 # Architecture Decision Records: Amplify
 
-**Version:** 1.0
-**Date:** April 12, 2026
+**Version:** 1.1
+**Date:** April 13, 2026
 **Author:** Gayashan
 **Status:** Active
 
@@ -112,6 +112,32 @@ Neon Postgres with Prisma.
 - **Positive:** Prisma schema serves as the single source of truth for relational data models, shared across Next.js and FastAPI.
 - **Negative:** Neon's serverless cold starts can add latency to the first query after idle periods (typically 100–500ms). Mitigated by keepalive connections in production.
 - **Negative:** `prisma-client-py` is less mature than the Node.js Prisma client. Edge cases may require raw SQL.
+
+### Addendum — Dual Prisma ownership (2026-04-14)
+
+Both `apps/web` and `apps/api` depend on Prisma: Next.js uses `@prisma/client`
+for BetterAuth and Server Actions; FastAPI uses `prisma-client-py` for
+LangGraph persistence. Rather than introduce a shared `packages/` workspace
+(rejected in ADR-001), the project keeps **two Prisma installs against one
+canonical schema**:
+
+- `apps/web/prisma/schema.prisma` is the **source of truth**, and
+  `apps/web/prisma/migrations/` is the **only** migration history.
+- `apps/api/db/prisma/schema.prisma` is a hand-kept **mirror**. The sole
+  allowed diff is `generator client { provider = "prisma-client-py" }`. The
+  api side runs `uv run prisma generate` to produce a typed client, and
+  optionally `prisma db pull` to detect drift. It MUST NOT run `migrate dev`,
+  `migrate deploy`, or `db push` — migrations flow one way, from web.
+
+**Consequences:**
+- **Positive:** BetterAuth keeps its Node Prisma adapter; FastAPI keeps
+  type-safe Python queries. No shared-package tooling added.
+- **Negative:** Schema drift is possible. Mitigated by a CI check that diffs
+  the two `schema.prisma` files (ignoring the `generator` block) and fails
+  the build on mismatch. Developers updating the schema MUST copy the change
+  into both files in the same commit.
+- **Negative:** Two Prisma installs means two lockfiles and two generated
+  clients. Acceptable overhead for a solo-founder stage.
 
 ---
 
@@ -679,6 +705,160 @@ None. Production services on Railway are unaffected. Docker was never part of th
 
 ---
 
+## ADR-019: Next.js Pinned to 16.x (Security Upgrade from 15.x)
+
+**Status:** Accepted
+**Date:** April 13, 2026
+
+### Context
+
+Shortly after the initial scaffolding on Next.js 15.1.0, pnpm surfaced a deprecation warning pointing at **CVE-2025-66478**: the installed 15.1.0 release has a security vulnerability and must be upgraded to a patched version. At the same time, 16.x had become the current stable `latest` tag on npm.
+
+### Options Considered
+
+1. **Upgrade to the latest 15.x patch** (e.g., 15.5.x from the `backport` dist-tag) — stays on the same major line.
+2. **Upgrade to the latest 16.x stable** — jumps one major version.
+3. **Stay on 15.1.0** — not viable; known CVE.
+
+### Decision
+
+Option 2 — pin Next.js to **16.2.3** (current stable `latest`) and upgrade `eslint-config-next` to the matching version.
+
+### Rationale
+
+- 16.x is the actively maintained line and receives security patches first. Staying on 15.x trades one known CVE for the ongoing risk of the next one landing on a line that will soon be in maintenance-only mode.
+- The project is in Phase 1 scaffolding; there is essentially no Next.js-specific code to break (only `layout.tsx`, `page.tsx`, `globals.css`, and config files). The cost of a major-version jump is lowest right now and only grows from here.
+- React 19 remains supported, so `react`/`react-dom` do not need to change.
+- `eslint-config-next` is upgraded in lockstep to avoid lint drift against framework internals.
+
+### Consequences
+
+- **Positive:** CVE-2025-66478 resolved. On the line that will get the next batch of patches first.
+- **Positive:** Upgrade cost was effectively zero because this happened before any feature code was written against Next 15.
+- **Negative:** Minor behavioural differences between 15 and 16 (App Router defaults, caching semantics) may surface later when real features are built; mitigated by re-reading the Next 16 release notes when starting Phase 3.
+- **Negative:** `pnpm-lock.yaml` must be regenerated (`pnpm install`) after the `package.json` change.
+
+### Revisit Trigger
+
+If the Next.js 16 line introduces breaking changes that materially affect our Server Actions + SSE streaming pattern, reassess; otherwise track patch releases as they arrive.
+
+---
+
+## ADR-020: Biome for apps/web lint + format (no ESLint/Prettier)
+
+**Status:** Accepted
+**Date:** 2026-04-14
+
+### Context
+
+The frontend needs lint + format. Earlier specs referenced ESLint + Prettier
+out of habit. When the Next.js project was actually scaffolded, Biome was
+chosen and `biome.json` is already in the repo.
+
+### Decision
+
+Use **Biome** (`@biomejs/biome`) as the sole lint + format tool for
+`apps/web`. Do not add ESLint, Prettier, or `eslint-config-next`.
+
+### Rationale
+
+- One tool instead of two; a single config, a single CLI, a single CI step.
+- Dramatically faster than ESLint + Prettier on this codebase size.
+- No dependency on `eslint-config-next`, which removes one reason to upgrade
+  in lockstep with Next (cf. ADR-019's consequences).
+- Biome's Next/React rules cover the patterns this project uses; where a gap
+  exists, it is accepted rather than dual-toolchained.
+
+### Consequences
+
+- **Positive:** Faster CI, smaller `devDependencies`, less config drift.
+- **Positive:** ADR-019's "upgrade `eslint-config-next` in lockstep" clause
+  is moot.
+- **Negative:** Some Next-specific lint rules that exist in
+  `eslint-plugin-next` do not have a Biome equivalent; accepted trade-off.
+- **Negative:** Team onboarding docs must point to Biome instead of ESLint.
+
+---
+
+## ADR-021: Zod for frontend runtime validation
+
+**Status:** Accepted
+**Date:** 2026-04-14
+
+### Context
+
+The frontend receives typed payloads from FastAPI (SSE events, REST
+responses) whose shapes are defined by Pydantic models on the backend.
+Compile-time TypeScript types alone cannot catch contract drift at runtime —
+a mismatched or malformed payload would render bad state into the UI with no
+explicit failure.
+
+### Decision
+
+Adopt **Zod** on `apps/web` as the runtime validation layer for all data
+crossing the FastAPI boundary. SSE events are validated via `.safeParse` in
+`lib/sse-client.ts` before being dispatched to the chat store; REST
+responses in `lib/api-client.ts` are validated the same way. Zod schemas are
+generated from the Pydantic models at build time (see tasks.md T018) so the
+two sides cannot silently drift.
+
+### Rationale
+
+- Pydantic already validates at the backend boundary; Zod gives parity at
+  the frontend boundary. Constitution V ("Fail visibly, never silently")
+  applies to bad payloads as much as to failed research runs.
+- Generated schemas mean the contract is authored once (Pydantic) and
+  enforced twice, with drift caught at the Next.js build step.
+- Zod's inferred types (`z.infer<typeof Schema>`) replace hand-written TS
+  types, eliminating the "types and validators drift apart" class of bug.
+- Small bundle cost (~12kB gzipped) is acceptable for the guarantee.
+
+### Consequences
+
+- **Positive:** Runtime safety at the FastAPI boundary; contract drift
+  becomes a loud, localized error instead of a silent UI bug.
+- **Positive:** Single source of truth (Pydantic) — generated Zod schemas
+  cannot drift without breaking the build.
+- **Negative:** Build pipeline now has a Pydantic → Zod generation step; a
+  bug in the generator can block builds. Mitigated by keeping the generator
+  small and snapshot-testing its output.
+
+---
+
+## ADR-022: Python 3.13 for apps/api
+
+**Status:** Accepted
+**Date:** 2026-04-14
+
+### Context
+
+Earlier planning docs referenced Python 3.12. When `apps/api` was scaffolded
+with `uv`, `pyproject.toml` was set to `requires-python = ">=3.13"` because
+3.13 is the current stable line at the time of scaffolding and all pinned
+dependencies (FastAPI, LangGraph, Pydantic v2, `prisma-client-py`, Motor,
+httpx) support it.
+
+### Decision
+
+Standardize on **Python 3.13** for `apps/api`. Update all spec/plan/quickstart
+references from 3.12 to 3.13.
+
+### Rationale
+
+- 3.13 is the current stable release and receives security patches longest.
+- No blocker dependencies; the existing scaffolding already runs on 3.13.
+- Freer-threaded 3.13 enables future experiments with the `no-GIL` build
+  without another major version bump.
+
+### Consequences
+
+- **Positive:** Fewest security-patch cycles of any supported line.
+- **Positive:** Avoids an unnecessary downgrade of an already-working env.
+- **Negative:** Railway's Railpack must provide Python 3.13; verified at
+  deployment time. If unavailable, pin to 3.12 and revisit.
+
+---
+
 ## Summary Table
 
 | ADR | Decision | Status |
@@ -701,6 +881,10 @@ None. Production services on Railway are unaffected. Docker was never part of th
 | ADR-016 | pnpm for Node.js package management | Accepted |
 | ADR-017 | uv for Python package management | Accepted |
 | ADR-018 | No Docker — cloud free tiers for local dev | Accepted |
+| ADR-019 | Next.js pinned to 16.x (CVE-2025-66478 upgrade) | Accepted |
+| ADR-020 | Biome for apps/web lint + format (no ESLint/Prettier) | Accepted |
+| ADR-021 | Zod for frontend runtime validation | Accepted |
+| ADR-022 | Python 3.13 for apps/api | Accepted |
 
 ---
 

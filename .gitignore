@@ -1,0 +1,45 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / Next.js
+node_modules/
+dist/
+build/
+.next/
+out/
+*.log
+.turbo/
+
+# Prisma
+apps/api/prisma/client/
+apps/api/prisma/generated/
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# Coverage
+coverage/
+.coverage
+htmlcov/

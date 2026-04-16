@@ -1,0 +1,26 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "api",
+			"runtimeExecutable": "uv",
+			"runtimeArgs": [
+				"run",
+				"uvicorn",
+				"main:app",
+				"--reload",
+				"--port",
+				"8000"
+			],
+			"port": 8000,
+			"cwd": "apps/api"
+		},
+		{
+			"name": "web",
+			"runtimeExecutable": "pnpm",
+			"runtimeArgs": ["dev"],
+			"port": 3000,
+			"cwd": "apps/web"
+		}
+	]
+}

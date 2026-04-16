@@ -1,0 +1,176 @@
+// MIRROR of apps/web/prisma/schema.prisma.
+// The only intentional diff from the web schema is the `generator` block.
+// Keep this file in sync by hand: the web schema owns migration history.
+// See README.md in this directory for the sync rule.
+
+generator client {
+  provider = "prisma-client-py"
+  interface = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (BetterAuth)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String         @id
+  name          String
+  email         String
+  emailVerified Boolean        @default(false)
+  image         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  conversations Conversation[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Research Agent (spec 001-research-agent)
+// ---------------------------------------------------------------------------
+
+enum MessageRole {
+  user
+  system
+  assistant
+}
+
+enum ResearchStatus {
+  pending
+  running
+  complete
+  failed
+  cancelled
+}
+
+enum FailureCode {
+  tavily_unavailable
+  tavily_rate_limited
+  llm_unavailable
+  llm_invalid_output
+  no_findings_above_threshold
+  user_cancelled
+  budget_exceeded
+  rate_limited_user
+}
+
+model Conversation {
+  id               String            @id @default(cuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  archivedAt       DateTime?
+  messages         Message[]
+  researchRequests ResearchRequest[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("conversation")
+}
+
+model Message {
+  id              String         @id @default(cuid())
+  conversationId  String
+  conversation    Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            MessageRole
+  content         String
+  briefId         String?
+  progressEvents  Json           @default("[]")
+  failureRecordId String?
+  failureRecord   FailureRecord? @relation(fields: [failureRecordId], references: [id])
+  createdAt       DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("message")
+}
+
+model ResearchRequest {
+  id              String         @id @default(cuid())
+  conversationId  String
+  conversation    Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messageId       String
+  rawQuestion     String
+  scopedQuestion  String
+  plan            Json?
+  status          ResearchStatus @default(pending)
+  budgetQueries   Int            @default(8)
+  budgetSeconds   Int            @default(60)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  briefId         String?
+  failureRecordId String?
+
+  @@index([conversationId, startedAt])
+  @@map("research_request")
+}
+
+model FailureRecord {
+  id              String      @id @default(cuid())
+  code            FailureCode
+  recoverable     Boolean
+  userMessage     String
+  suggestedAction String?
+  traceId         String?
+  createdAt       DateTime    @default(now())
+  messages        Message[]
+
+  @@map("failure_record")
+}
