@@ -5,6 +5,9 @@
 import Link from 'next/link'
 
 import { apiJson } from '@/lib/api-client'
+import prisma from "@/lib/prisma"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
 
 type ConversationRow = {
 	id: string
@@ -14,18 +17,18 @@ type ConversationRow = {
 	latest_status: 'complete' | 'pending' | 'failed'
 }
 
-type ListResponse = {
-	conversations: ConversationRow[]
-	next_cursor: string | null
-}
+// type ListResponse = {
+// 	conversations: ConversationRow[]
+// 	next_cursor: string | null
+// }
 
-function formatUpdated(iso: string): string {
-	try {
-		return new Date(iso).toLocaleString()
-	} catch {
-		return iso
-	}
-}
+// function formatUpdated(iso: string): string {
+// 	try {
+// 		return new Date(iso).toLocaleString()
+// 	} catch {
+// 		return iso
+// 	}
+// }
 
 function StatusBadge({ status }: { status: ConversationRow['latest_status'] }) {
 	const color =
@@ -42,11 +45,33 @@ function StatusBadge({ status }: { status: ConversationRow['latest_status'] }) {
 }
 
 export default async function ConversationsListPage() {
-	let data: ListResponse
-	try {
-		data = await apiJson<ListResponse>('/api/v1/conversations')
-	} catch {
-		data = { conversations: [], next_cursor: null }
+
+	const session = await auth.api.getSession({
+		headers: await headers()
+	})
+
+		const data = await prisma.conversation.findMany({
+		where: {
+			userId: session?.user.id,
+		},
+		orderBy: {
+			updatedAt: 'desc',
+		}
+	})
+	
+	// let data: ListResponse
+	// try {
+	// 	data = await apiJson<ListResponse>('/api/v1/conversations')
+	// } catch {
+	// 	data = { conversations: [], next_cursor: null }
+	// }
+
+	if (!session) {
+		return (
+			<div>
+				<h1>Please login</h1>
+			</div>
+		)
 	}
 
 	return (
@@ -61,13 +86,13 @@ export default async function ConversationsListPage() {
 				</Link>
 			</div>
 
-			{data.conversations.length === 0 ? (
+			{data.length === 0 ? (
 				<p className="text-sm text-muted-foreground">
 					No prior conversations yet. Start one from the chat page.
 				</p>
 			) : (
 				<ul className="space-y-2">
-					{data.conversations.map((c) => (
+					{data.map((c) => (
 						<li key={c.id}>
 							<Link
 								href={`/chat/${c.id}`}
@@ -76,10 +101,10 @@ export default async function ConversationsListPage() {
 								<div className="min-w-0 flex-1">
 									<div className="truncate font-medium">{c.title}</div>
 									<div className="text-xs text-muted-foreground">
-										Updated {formatUpdated(c.updated_at)}
+										Updated {c.updatedAt.toLocaleString()}
 									</div>
 								</div>
-								<StatusBadge status={c.latest_status} />
+								{/* <StatusBadge status={c.latest_status} /> */}
 							</Link>
 						</li>
 					))}
