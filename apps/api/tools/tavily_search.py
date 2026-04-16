@@ -31,6 +31,15 @@ _CACHE_KEY_PREFIX = "tavily:q:"
 _url_registry: dict[str, set[str]] = {}
 
 
+class TavilyUnavailable(Exception):
+    """Tavily cannot service this request — config/auth/network problem.
+
+    Classified upstream (agents/research.py::EXCEPTION_TO_FAILURE_CODE) to
+    FailureCode.tavily_unavailable so the user sees a specific, recoverable
+    FailureCard (Constitution V — no silent/generic failures).
+    """
+
+
 @dataclass
 class TavilyResult:
     title: str
@@ -55,8 +64,22 @@ async def _raw_search(query: str, *, max_results: int = 5) -> list[dict[str, Any
     from tavily import AsyncTavilyClient  # type: ignore[import-untyped]
 
     s = get_settings()
-    client = AsyncTavilyClient(api_key=s.tavily_api_key)
-    resp = await client.search(query=query, max_results=max_results, search_depth="basic")
+    api_key = (s.tavily_api_key or "").strip()
+    if not api_key:
+        raise TavilyUnavailable("TAVILY_API_KEY is not configured")
+    client = AsyncTavilyClient(api_key=api_key)
+    try:
+        resp = await client.search(
+            query=query, max_results=max_results, search_depth="basic"
+        )
+    except TimeoutError:
+        # Let TavilyTool.search own timeout retry/classification.
+        raise
+    except TavilyUnavailable:
+        raise
+    except Exception as exc:
+        # Auth errors (401/403), network failures, malformed responses, etc.
+        raise TavilyUnavailable(f"Tavily call failed: {exc}") from exc
     return list(resp.get("results", []))
 
 
@@ -97,10 +120,15 @@ class TavilyTool:
                 )
             except TimeoutError:
                 log.warning("tavily timeout; retrying once", extra={"query": query})
-                raw = await asyncio.wait_for(
-                    _raw_search(query, max_results=max_results),
-                    timeout=_CALL_TIMEOUT_SECONDS,
-                )
+                try:
+                    raw = await asyncio.wait_for(
+                        _raw_search(query, max_results=max_results),
+                        timeout=_CALL_TIMEOUT_SECONDS,
+                    )
+                except TimeoutError as exc:
+                    raise TavilyUnavailable(
+                        "Tavily timed out twice in a row"
+                    ) from exc
             await self._cache_set(query, raw)
         else:
             raw = cached

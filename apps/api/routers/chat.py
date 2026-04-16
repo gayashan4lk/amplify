@@ -114,54 +114,13 @@ async def chat_stream(
             },
         )
 
-    # --- conversation bootstrap ------------------------------------------
+    # --- conversation bootstrap moved INSIDE the SSE generator ----------
+    # Previously these DB calls ran at router-scope; any exception (e.g.
+    # MongoDB Atlas unreachable) bubbled out as an uncaught HTTP 500 with
+    # NO SSE frames, so the frontend never rendered <FailureCard />. Per
+    # Constitution V (no silent/generic failures) and §7 of the spec,
+    # every user-visible failure must arrive as an SSE error event.
     is_new = body.conversation_id is None
-    conversation: Any
-    if is_new:
-        title = body.message[:140] or "New conversation"
-        conversation = await conversations.create_conversation(user_id=user_id, title=title)
-    else:
-        conversation = await conversations.get_conversation(
-            conversation_id=body.conversation_id, user_id=user_id
-        )
-        if conversation is None:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "not_found",
-                        "message": "Conversation not found.",
-                        "recoverable": False,
-                    }
-                },
-            )
-
-    conversation_id: str = getattr(conversation, "id", None) or conversation["id"]
-
-    user_message = await conversations.append_message(
-        conversation_id=conversation_id,
-        user_id=user_id,
-        role="user",
-        content=body.message,
-    )
-
-    research_request = await conversations.create_research_request(
-        user_id=user_id,
-        conversation_id=conversation_id,
-        message_id=getattr(user_message, "id", None) or (user_message or {}).get("id", "") or "",
-        raw_question=body.message,
-    )
-    research_request_id = (
-        getattr(research_request, "id", None)
-        or (research_request or {}).get("id")
-        or f"rq_{uuid4().hex[:12]}"
-    )
-
-    prior_brief_model: IntelligenceBrief | None = await briefs.latest_for_conversation(
-        conversation_id=conversation_id, user_id=user_id
-    )
-    prior_brief_json = prior_brief_model.model_dump(mode="json") if prior_brief_model else None
-
     assistant_message_id = f"msg_{uuid4().hex[:12]}"
 
     async def sse_gen():
@@ -178,6 +137,104 @@ async def chat_stream(
                         "at": event.at.isoformat(),
                     }
                 )
+
+        async def _emit_failure(
+            *, code: FailureCode, conversation_id_for_event: str
+        ):
+            message, suggestion = _error_text(code)
+            record = await record_failure(
+                conversations=conversations,
+                prisma=getattr(request.app.state, "prisma", None),
+                user_id=user_id,
+                conversation_id=conversation_id_for_event,
+                code=code,
+                user_message=message,
+                suggested_action=suggestion,
+                progress_events=progress_trail,
+            )
+            # `error` is itself the terminal frame for a failed stream — we
+            # do NOT emit a trailing `done` here. Adding "error" to the Done
+            # `final_status` Literal would require a contract + frontend
+            # parser change (see sse/events.py and apps/web/lib/types/sse-events.ts).
+            yield await _emit(
+                alloc,
+                ErrorEvent(
+                    conversation_id=conversation_id_for_event,
+                    at=_now(),
+                    code=code.value,  # type: ignore[arg-type]
+                    message=message,
+                    recoverable=record.recoverable,
+                    suggested_action=suggestion,
+                    failure_record_id=record.id,
+                    trace_id=record.trace_id,
+                ),
+            )
+
+        # --- bootstrap (DB work) --------------------------------------
+        conversation_id: str = ""
+        research_request_id: str = ""
+        prior_brief_json: dict[str, Any] | None = None
+        prior_brief_model: IntelligenceBrief | None = None
+        try:
+            conversation: Any
+            if is_new:
+                title = body.message[:140] or "New conversation"
+                conversation = await conversations.create_conversation(
+                    user_id=user_id, title=title
+                )
+            else:
+                conversation = await conversations.get_conversation(
+                    conversation_id=body.conversation_id, user_id=user_id
+                )
+                if conversation is None:
+                    # Not-found still surfaces as a FailureCard so the user
+                    # sees something specific rather than a blank stream.
+                    async for frame in _emit_failure(
+                        code=FailureCode.llm_invalid_output,
+                        conversation_id_for_event=body.conversation_id or "",
+                    ):
+                        yield frame
+                    return
+
+            conversation_id = getattr(conversation, "id", None) or conversation["id"]
+
+            user_message = await conversations.append_message(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                role="user",
+                content=body.message,
+            )
+
+            research_request = await conversations.create_research_request(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                message_id=getattr(user_message, "id", None)
+                or (user_message or {}).get("id", "")
+                or "",
+                raw_question=body.message,
+            )
+            research_request_id = (
+                getattr(research_request, "id", None)
+                or (research_request or {}).get("id")
+                or f"rq_{uuid4().hex[:12]}"
+            )
+
+            prior_brief_model = await briefs.latest_for_conversation(
+                conversation_id=conversation_id, user_id=user_id
+            )
+            prior_brief_json = (
+                prior_brief_model.model_dump(mode="json")
+                if prior_brief_model
+                else None
+            )
+        except Exception as exc:
+            log.exception("chat_stream bootstrap failed: %r", exc)
+            code = _exception_to_failure_code(exc)
+            async for frame in _emit_failure(
+                code=code, conversation_id_for_event=conversation_id
+            ):
+                yield frame
+            return
 
         # 1) conversation_ready
         yield await _emit(
@@ -558,10 +615,19 @@ def _exception_to_failure_code(exc: Exception) -> FailureCode:
     for cls, code in EXCEPTION_TO_FAILURE_CODE.items():
         if isinstance(exc, cls):
             return code
+    # Storage/driver failures surface as retryable service errors. We can't
+    # import pymongo at module scope (optional dep in some test envs) so
+    # match by module/class name on the exception type's MRO.
+    type_chain = {f"{t.__module__}.{t.__name__}" for t in type(exc).__mro__}
+    if any(name.startswith("pymongo.errors.") for name in type_chain):
+        return FailureCode.llm_unavailable
     msg = str(exc).lower()
     if "tavily" in msg and ("timeout" in msg or "unreach" in msg or "503" in msg):
         return FailureCode.tavily_unavailable
     if "openai" in msg or "anthropic" in msg:
+        return FailureCode.llm_unavailable
+    if "ssl" in msg and "handshake" in msg:
+        # Most common path: MongoDB Atlas TLS handshake failure.
         return FailureCode.llm_unavailable
     return FailureCode.llm_invalid_output
 

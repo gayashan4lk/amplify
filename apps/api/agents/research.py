@@ -31,7 +31,12 @@ NOTES_MAX = 500
 UNSOURCED_DEFAULT_NOTE = "Evidence not supported by any verified source."
 from services.llm_router import get_llm
 from services.tracing import get_current_trace_id as _current_trace_id
-from tools.tavily_search import TavilyTool, get_registered_urls, reset_registry
+from tools.tavily_search import (
+    TavilyTool,
+    TavilyUnavailable,
+    get_registered_urls,
+    reset_registry,
+)
 
 log = logging.getLogger(__name__)
 
@@ -410,4 +415,5 @@ EXCEPTION_TO_FAILURE_CODE = {
     BudgetExceeded: FailureCode.budget_exceeded,
     NoFindingsAboveThreshold: FailureCode.no_findings_above_threshold,
     LLMInvalidOutput: FailureCode.llm_invalid_output,
+    TavilyUnavailable: FailureCode.tavily_unavailable,
 }
