@@ -30,19 +30,19 @@ type ConversationRow = {
 // 	}
 // }
 
-function StatusBadge({ status }: { status: ConversationRow['latest_status'] }) {
-	const color =
-		status === 'complete'
-			? 'bg-emerald-100 text-emerald-900'
-			: status === 'failed'
-				? 'bg-rose-100 text-rose-900'
-				: 'bg-amber-100 text-amber-900'
-	return (
-		<span className={`rounded px-2 py-0.5 text-xs font-medium ${color}`}>
-			{status}
-		</span>
-	)
-}
+// function StatusBadge({ status }: { status: ConversationRow['latest_status'] }) {
+// 	const color =
+// 		status === 'complete'
+// 			? 'bg-emerald-100 text-emerald-900'
+// 			: status === 'failed'
+// 				? 'bg-rose-100 text-rose-900'
+// 				: 'bg-amber-100 text-amber-900'
+// 	return (
+// 		<span className={`rounded px-2 py-0.5 text-xs font-medium ${color}`}>
+// 			{status}
+// 		</span>
+// 	)
+// }
 
 export default async function ConversationsListPage() {
 
@@ -104,7 +104,6 @@ export default async function ConversationsListPage() {
 										Updated {c.updatedAt.toLocaleString()}
 									</div>
 								</div>
-								{/* <StatusBadge status={c.latest_status} /> */}
 							</Link>
 						</li>
 					))}
