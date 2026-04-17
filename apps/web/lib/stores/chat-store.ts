@@ -13,10 +13,16 @@ import type { IntelligenceBrief, SseEvent } from '@/lib/types/sse-events'
 export type AgentName = 'supervisor' | 'research' | 'clarification'
 export type ProgressPhase = 'planning' | 'searching' | 'synthesizing' | 'validating'
 
+export type ActivityEntry =
+	| { kind: 'agent_start'; agent: AgentName; at: number }
+	| { kind: 'agent_end'; agent: AgentName; at: number }
+	| { kind: 'progress'; phase: ProgressPhase; message: string; at: number }
+
 export type StoredMessage =
 	| { kind: 'user'; id: string; content: string }
 	| { kind: 'assistant_text'; id: string; content: string }
 	| { kind: 'assistant_brief'; id: string; brief: IntelligenceBrief }
+	| { kind: 'activity_log'; id: string; entries: ActivityEntry[] }
 	| {
 			kind: 'assistant_clarification'
 			id: string
@@ -40,6 +46,7 @@ export type StreamState = {
 	activeAgent: AgentName | null
 	progress: { phase: ProgressPhase; message: string } | null
 	textBufferByMessageId: Record<string, string>
+	activityEntries: ActivityEntry[]
 }
 
 type ChatState = {
@@ -58,7 +65,20 @@ const emptyStream = (): StreamState => ({
 	activeAgent: null,
 	progress: null,
 	textBufferByMessageId: {},
+	activityEntries: [],
 })
+
+function flushActivityLog(
+	messages: StoredMessage[],
+	entries: ActivityEntry[],
+	idHint: string,
+): StoredMessage[] {
+	if (entries.length === 0) return messages
+	return [
+		...messages,
+		{ kind: 'activity_log', id: `activity_${idHint}`, entries },
+	]
+}
 
 export const useChatStore = create<ChatState>((set, get) => ({
 	conversationId: null,
@@ -101,24 +121,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
 				return
 			}
 			case 'agent_start': {
+				const entry: ActivityEntry = { kind: 'agent_start', agent: ev.agent, at: Date.now() }
 				set({
-					stream: { ...state.stream, activeAgent: ev.agent },
+					stream: {
+						...state.stream,
+						activeAgent: ev.agent,
+						activityEntries: [...state.stream.activityEntries, entry],
+					},
 					seenEventIds: seen,
 				})
 				return
 			}
 			case 'agent_end': {
+				const endingAgent = state.stream.activeAgent
+				const entries = endingAgent
+					? [...state.stream.activityEntries, { kind: 'agent_end', agent: endingAgent, at: Date.now() } as ActivityEntry]
+					: state.stream.activityEntries
 				set({
-					stream: { ...state.stream, activeAgent: null },
+					stream: { ...state.stream, activeAgent: null, activityEntries: entries },
 					seenEventIds: seen,
 				})
 				return
 			}
 			case 'progress': {
+				const entry: ActivityEntry = {
+					kind: 'progress',
+					phase: ev.phase,
+					message: ev.message,
+					at: Date.now(),
+				}
 				set({
 					stream: {
 						...state.stream,
 						progress: { phase: ev.phase, message: ev.message },
+						activityEntries: [...state.stream.activityEntries, entry],
 					},
 					seenEventIds: seen,
 				})
@@ -141,11 +177,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 			case 'ephemeral_ui': {
 				if (ev.component_type === 'intelligence_brief') {
 					const brief = ev.component as IntelligenceBrief
+					const flushed = flushActivityLog(
+						state.messages,
+						state.stream.activityEntries,
+						ev.message_id,
+					)
 					set({
 						messages: [
-							...state.messages,
+							...flushed,
 							{ kind: 'assistant_brief', id: ev.message_id, brief },
 						],
+						stream: { ...state.stream, activityEntries: [] },
 						seenEventIds: seen,
 					})
 				} else if (ev.component_type === 'clarification_poll') {
@@ -166,9 +208,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 					if (alreadyPresent) {
 						set({ seenEventIds: seen })
 					} else {
+						const flushed = flushActivityLog(
+							state.messages,
+							state.stream.activityEntries,
+							ev.message_id,
+						)
 						set({
 							messages: [
-								...state.messages,
+								...flushed,
 								{
 									kind: 'assistant_clarification',
 									id: ev.message_id,
@@ -178,6 +225,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 									answered: false,
 								},
 							],
+							stream: { ...state.stream, activityEntries: [] },
 							seenEventIds: seen,
 						})
 					}
@@ -185,9 +233,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 				return
 			}
 			case 'error': {
+				const flushed = flushActivityLog(
+					state.messages,
+					state.stream.activityEntries,
+					eventId,
+				)
 				set({
 					messages: [
-						...state.messages,
+						...flushed,
 						{
 							kind: 'failure',
 							id: eventId,
@@ -212,8 +265,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 					id,
 					content,
 				}))
+				const withActivity = flushActivityLog(
+					state.messages,
+					state.stream.activityEntries,
+					eventId,
+				)
 				set({
-					messages: [...state.messages, ...extraMessages],
+					messages: [...withActivity, ...extraMessages],
 					stream: emptyStream(),
 					seenEventIds: seen,
 				})

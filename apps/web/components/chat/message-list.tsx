@@ -50,6 +50,25 @@ export default function MessageList() {
 								<p className="text-sm leading-6">{m.content}</p>
 							</li>
 						)
+					case 'activity_log':
+						return (
+							<li key={m.id} className="self-stretch rounded-md border border-dashed px-4 py-3 text-muted-foreground">
+								<div className="text-xs uppercase tracking-wide">activity</div>
+								<ul className="mt-2 space-y-1 text-sm">
+									{m.entries.map((e, i) => (
+										<li key={i}>
+											{e.kind === 'agent_start' && <>{e.agent} started</>}
+											{e.kind === 'agent_end' && <>{e.agent} finished</>}
+											{e.kind === 'progress' && (
+												<>
+													<span className="font-medium">{e.phase}:</span> {e.message}
+												</>
+											)}
+										</li>
+									))}
+								</ul>
+							</li>
+						)
 					case 'assistant_brief':
 						return (
 							<li key={m.id} className="self-stretch">
