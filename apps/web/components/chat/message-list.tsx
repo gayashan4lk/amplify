@@ -3,6 +3,9 @@
 
 'use client'
 
+import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
 import StreamRenderer from '@/components/chat/stream-renderer'
 import ClarificationPoll from '@/components/ephemeral/clarification-poll'
 import IntelligenceBrief from '@/components/ephemeral/intelligence-brief'
@@ -46,8 +49,10 @@ export default function MessageList() {
 						)
 					case 'assistant_text':
 						return (
-							<li key={m.id} className="self-start max-w-xl">
-								<p className="text-sm leading-6">{m.content}</p>
+							<li key={m.id} className="self-start max-w-2xl">
+								<div className="prose prose-sm max-w-none text-sm leading-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_strong]:font-semibold [&_h1]:mt-3 [&_h1]:mb-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_a]:underline [&_a]:underline-offset-2">
+									<Markdown remarkPlugins={[remarkGfm]}>{m.content}</Markdown>
+								</div>
 							</li>
 						)
 					case 'activity_log':

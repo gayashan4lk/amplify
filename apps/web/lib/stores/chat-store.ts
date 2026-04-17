@@ -76,7 +76,7 @@ function flushActivityLog(
 	if (entries.length === 0) return messages
 	return [
 		...messages,
-		{ kind: 'activity_log', id: `activity_${idHint}`, entries },
+		{ kind: 'activity_log', id: `activity_${idHint}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, entries },
 	]
 }
 
@@ -177,16 +177,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 			case 'ephemeral_ui': {
 				if (ev.component_type === 'intelligence_brief') {
 					const brief = ev.component as IntelligenceBrief
+					const alreadyPresent = state.messages.some((m) => m.id === ev.message_id)
 					const flushed = flushActivityLog(
 						state.messages,
 						state.stream.activityEntries,
 						ev.message_id,
 					)
 					set({
-						messages: [
-							...flushed,
-							{ kind: 'assistant_brief', id: ev.message_id, brief },
-						],
+						messages: alreadyPresent
+							? flushed
+							: [
+									...flushed,
+									{ kind: 'assistant_brief', id: ev.message_id, brief },
+								],
 						stream: { ...state.stream, activityEntries: [] },
 						seenEventIds: seen,
 					})
@@ -259,12 +262,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 			}
 			case 'done': {
 				// flush any buffered text delta to a message
+				const existingIds = new Set(state.messages.map((m) => m.id))
 				const buffered = Object.entries(state.stream.textBufferByMessageId)
-				const extraMessages: StoredMessage[] = buffered.map(([id, content]) => ({
-					kind: 'assistant_text',
-					id,
-					content,
-				}))
+				const extraMessages: StoredMessage[] = buffered
+					.filter(([id]) => !existingIds.has(id))
+					.map(([id, content]) => ({
+						kind: 'assistant_text',
+						id,
+						content,
+					}))
 				const withActivity = flushActivityLog(
 					state.messages,
 					state.stream.activityEntries,
