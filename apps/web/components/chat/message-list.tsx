@@ -13,6 +13,7 @@ import FailureCard from '@/components/chat/failure-card'
 import { useChatStore } from '@/lib/stores/chat-store'
 import { SseClient } from '@/lib/sse-client'
 import type { SseEvent } from '@/lib/types/sse-events'
+import AgentStatus from "./agent-status"
 
 export default function MessageList() {
 	const messages = useChatStore((s) => s.messages)
@@ -107,6 +108,7 @@ export default function MessageList() {
 						)
 				}
 			})}
+			<AgentStatus />
 			<StreamRenderer />
 		</ol>
 	)

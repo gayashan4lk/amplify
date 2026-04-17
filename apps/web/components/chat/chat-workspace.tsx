@@ -6,7 +6,6 @@
 
 import { useEffect } from 'react'
 
-import AgentStatus from '@/components/chat/agent-status'
 import MessageInput from '@/components/chat/message-input'
 import MessageList from '@/components/chat/message-list'
 import { SseClient } from '@/lib/sse-client'
@@ -45,9 +44,6 @@ export default function ChatWorkspace({
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="flex items-center gap-3 border-b px-6 py-2">
-				<AgentStatus />
-			</div>
 			<div className="flex-1 overflow-y-auto px-6 py-4">
 				<MessageList />
 			</div>
