@@ -22,9 +22,15 @@ class Settings(BaseSettings):
     # LLM providers
     openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
     anthropic_api_key: str = Field(..., alias="ANTHROPIC_API_KEY")
+    google_api_key: str = Field(..., alias="GOOGLE_API_KEY")
 
     # Research
     tavily_api_key: str = Field(..., alias="TAVILY_API_KEY")
+
+    # Content generation
+    content_gen_enabled: bool = Field(False, alias="CONTENT_GEN_ENABLED")
+    image_store_bucket: str = Field(..., alias="IMAGE_STORE_BUCKET")
+    image_store_region: str = Field(..., alias="IMAGE_STORE_REGION")
 
     # Observability
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")

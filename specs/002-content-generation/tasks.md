@@ -23,11 +23,11 @@ description: "Task list for 002-content-generation"
 
 **Purpose**: Project scaffolding, env, feature flag, and dependency wiring shared by every user story.
 
-- [ ] T001 Add `CONTENT_GEN_ENABLED` feature flag plus `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `IMAGE_STORE_BUCKET`, `IMAGE_STORE_REGION` to backend config loader in apps/api/config/settings.py and document required env in apps/api/.env.example
-- [ ] T002 [P] Add `langchain-anthropic` and `google-genai` (or `langchain-google-genai`) to apps/api/pyproject.toml and lock with uv
-- [ ] T003 [P] Add object-storage SDK dependency (boto3 / s3-compatible client per pending backend-hosting ADR) to apps/api/pyproject.toml and lock with uv
-- [ ] T004 [P] Scaffold empty module files so later tasks can land without import errors: apps/api/agents/content_generation.py, apps/api/routers/content.py, apps/api/services/content_store.py, apps/api/services/image_store.py, apps/api/services/inflight_lock.py, apps/api/tools/generate_copy.py, apps/api/tools/generate_image.py, apps/api/models/content.py
-- [ ] T005 [P] Scaffold frontend module files: apps/web/components/ephemeral/content-variant-grid.tsx, apps/web/components/ephemeral/content-suggestions.tsx, apps/web/components/ephemeral/variant-card.tsx, apps/web/lib/schemas/content.ts
+- [X] T001 Add `CONTENT_GEN_ENABLED` feature flag plus `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `IMAGE_STORE_BUCKET`, `IMAGE_STORE_REGION` to backend config loader in apps/api/config/settings.py and document required env in apps/api/.env.example
+- [X] T002 [P] Add `langchain-anthropic` and `google-genai` (or `langchain-google-genai`) to apps/api/pyproject.toml and lock with uv
+- [X] T003 [P] Add object-storage SDK dependency (boto3 / s3-compatible client per pending backend-hosting ADR) to apps/api/pyproject.toml and lock with uv
+- [X] T004 [P] Scaffold empty module files so later tasks can land without import errors: apps/api/agents/content_generation.py, apps/api/routers/content.py, apps/api/services/content_store.py, apps/api/services/image_store.py, apps/api/services/inflight_lock.py, apps/api/tools/generate_copy.py, apps/api/tools/generate_image.py, apps/api/models/content.py
+- [X] T005 [P] Scaffold frontend module files: apps/web/components/ephemeral/content-variant-grid.tsx, apps/web/components/ephemeral/content-suggestions.tsx, apps/web/components/ephemeral/variant-card.tsx, apps/web/lib/schemas/content.ts
 
 ---
 
