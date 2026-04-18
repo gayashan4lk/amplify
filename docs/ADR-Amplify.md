@@ -1,9 +1,9 @@
 # Architecture Decision Records: Amplify
 
-**Version:** 1.1
-**Date:** April 13, 2026
+**Version:** 1.2
+**Date:** April 19, 2026
 **Author:** Gayashan
-**Status:** Active
+**Status:** Active — prisma mirror path corrected to `apps/api/prisma/` in ADR-003 addendum
 
 ---
 
@@ -123,7 +123,7 @@ canonical schema**:
 
 - `apps/web/prisma/schema.prisma` is the **source of truth**, and
   `apps/web/prisma/migrations/` is the **only** migration history.
-- `apps/api/db/prisma/schema.prisma` is a hand-kept **mirror**. The sole
+- `apps/api/prisma/schema.prisma` is a hand-kept **mirror**. The sole
   allowed diff is `generator client { provider = "prisma-client-py" }`. The
   api side runs `uv run prisma generate` to produce a typed client, and
   optionally `prisma db pull` to detect drift. It MUST NOT run `migrate dev`,
