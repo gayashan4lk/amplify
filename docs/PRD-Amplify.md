@@ -1,9 +1,9 @@
 # Product Requirements Document: Amplify
 
-**Version:** 1.0
-**Date:** April 11, 2026
+**Version:** 1.1
+**Date:** April 19, 2026
 **Author:** Gayashan
-**Status:** Draft
+**Status:** Draft — adds §15.0 noting 001-research-agent as the first shippable slice
 
 ---
 
@@ -406,6 +406,31 @@ Pricing to be validated through early user interviews and willingness-to-pay tes
 ---
 
 ## 15. Development Roadmap
+
+### Phase 0 — Current Implementation Status
+
+The first shippable slice is tracked in `specs/001-research-agent/` and
+covers the conversational **Research** loop only: user asks a market question,
+the supervisor routes, the research agent runs Tavily + LLM synthesis, events
+stream over SSE, and the UI renders an `IntelligenceBrief` ephemeral
+component with sourced findings and confidence levels.
+
+In scope for 001:
+- BetterAuth login / signup flows in Next.js
+- Chat workspace with streamed supervisor → research agent output
+- `IntelligenceBrief` and `ClarificationPoll` ephemeral components
+- Conversation persistence (Postgres) and brief persistence (MongoDB)
+- LangSmith tracing end to end
+
+Explicitly **not** in 001 (deferred to later phases below):
+- Content, Outreach, and Feedback agents
+- Channel integrations (LinkedIn, SendGrid, Meta, Google Ads, X)
+- Campaigns, integrations, settings pages
+- Vector store (Qdrant), ARQ workers, webhook ingestion
+- Image generation (Nano Banana 2)
+
+See SAD §4 for the monorepo tree marking what exists today vs. what is
+planned, and ADR-Amplify.md for the decisions underlying the structure.
 
 ### Phase 1 — Foundation (Weeks 1–6)
 - Set up LangGraph orchestration with Supervisor and Research agents
