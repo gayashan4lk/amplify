@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "prebuild": "tsx scripts/generate-sse-types.ts",
     "build": "next build",
