@@ -21,6 +21,16 @@ Scope is intentionally narrow: one platform (Facebook), one format (single post,
 carousels / video / reels), one output (two variants), one chance to re-prompt by
 regenerating. Publishing, scheduling, and multi-platform support are out of scope.
 
+## Clarifications
+
+### Session 2026-04-19
+
+- Q: What aspect ratio must generated images use for Facebook feed posts? → A: Square 1:1 (1080×1080)
+- Q: How long do generated variants persist? → A: Persisted per brief — reattached across sessions
+- Q: What is the regeneration cap per variant? → A: 3 regenerations per variant per request
+- Q: How is duplicate concurrent generation prevented? → A: Block while a run is in-flight for that brief
+- Q: What is the target length range for post descriptions? → A: 80–250 characters (above "See more" fold)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Generate two Facebook post variants from a brief (Priority: P1)
@@ -162,17 +172,20 @@ Facebook upload.
 - **FR-005**: The two variants in a single run MUST be meaningfully different
   from each other — different angle, hook, or framing in the description and
   a visually distinct image.
-- **FR-006**: Post descriptions MUST fit within Facebook's supported post
-  length for the composer and MUST include at least one emoji used in a way
-  that reads as natural (not emoji spam).
-- **FR-007**: Images MUST be produced at a resolution and aspect ratio suitable
-  for a Facebook feed post upload.
+- **FR-006**: Post descriptions MUST be between 80 and 250 characters
+  (inclusive) so they render fully above Facebook's "See more" truncation
+  fold, and MUST include at least one emoji used in a way that reads as
+  natural (not emoji spam).
+- **FR-007**: Images MUST be produced at a 1:1 square aspect ratio at 1080×1080
+  resolution, suitable for Facebook feed post upload on desktop and mobile.
 - **FR-008**: The system MUST show streaming progress during generation,
   indicating at minimum which sub-step is running (e.g., drafting copy,
   generating image) and which variant it applies to.
 - **FR-009**: Users MUST be able to regenerate a single variant (A or B)
   independently, with the option to provide additional plain-language guidance,
-  without affecting the other variant.
+  without affecting the other variant. Each variant MAY be regenerated at most
+  3 times per Content Generation Request; once the cap is reached the
+  regenerate action MUST be disabled for that variant with a brief explanation.
 - **FR-010**: Users MUST be able to copy a variant's description to the
   clipboard and download its image as a file.
 - **FR-011**: Each generated variant MUST retain a traceable link back to the
@@ -182,13 +195,19 @@ Facebook upload.
   versa) for a variant, the system MUST render the partial result and offer a
   targeted retry for just the failing half.
 - **FR-013**: The system MUST prevent duplicate concurrent generation runs for
-  the same brief triggered within a short window.
+  the same brief: while a run is in-flight for a given brief, any additional
+  trigger (button click or regenerate) for that same brief MUST be a no-op
+  until the in-flight run reaches a terminal state (complete or failed).
 - **FR-014**: Content flagged by safety policy (unsafe imagery, prohibited
   claims) MUST NOT be rendered to the user; the agent MUST explain briefly why
   and invite the user to adjust direction.
 - **FR-015**: Generation runs MUST complete (success or surfaced failure)
   within a bounded time budget, with a visible failure state if exceeded,
   rather than hanging indefinitely.
+- **FR-016**: Generated variants (description text and image) MUST be persisted
+  and reattached to their source intelligence brief, so that a user returning
+  to the chat in a later session sees the same variants rendered against that
+  brief.
 
 ### Key Entities
 
