@@ -45,6 +45,7 @@
     "@types/react-dom": "^19",
     "@vitest/ui": "^4.1.4",
     "jsdom": "^29.0.2",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "prisma": "^7.7.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
