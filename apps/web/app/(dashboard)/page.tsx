@@ -6,12 +6,7 @@ export default async function DashboardPage() {
 	const session = await getServerSession()
 
 	if (!session) {
-		return (
-			<div>
-				Please login
-				<Link href="/signin">Login</Link>
-			</div>
-		)
+		return null
 	}
 
 	const data = await prisma.conversation.findMany({

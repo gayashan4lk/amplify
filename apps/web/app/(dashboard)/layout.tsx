@@ -15,7 +15,18 @@ export default async function DashboardLayout({
 }) {
 	const session = await getServerSession()
 	if (!session?.user?.id) {
-		return <div>Please login</div>
+		return (
+			<div>
+				<h1 className="text-6xl font-bold">Amplify</h1>
+				<Link className="text-blue-500 hover:underline" href="/signin">
+					Login
+				</Link>{' '}
+				or{' '}
+				<Link className="text-blue-500 hover:underline" href="/signup">
+					Signup
+				</Link>
+			</div>
+		)
 	}
 
 	return (
