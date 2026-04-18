@@ -1,35 +1,44 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (template) → 1.0.0
-Rationale: Initial ratification. MAJOR bump from placeholder template to concrete
-governing document.
+Version change: 1.0.0 → 1.1.0
+Rationale: MINOR bump. Deployment platform redefined from Railway to Vercel in the
+Technology & Security Constraints section. No principles added, removed, or
+redefined; governance procedure unchanged. Cascading constraints (private-network
+auth model, self-hosted Qdrant location) updated and flagged for follow-up ADRs.
 
-Modified principles:
-  - [PRINCIPLE_1_NAME] → I. Conversation-First Experience
-  - [PRINCIPLE_2_NAME] → II. Specialist Agents via LangGraph
-  - [PRINCIPLE_3_NAME] → III. Structured State Over Freeform Text
-  - [PRINCIPLE_4_NAME] → IV. Stream Everything
-  - [PRINCIPLE_5_NAME] → V. Fail Visibly, Never Silently
-  - (added)            → VI. Human-in-the-Loop Before Outreach
-  - (added)            → VII. Solo-Founder Viable (Simplicity & Managed Services)
+Modified principles: none (principle text unchanged)
 
-Added sections:
-  - Technology & Security Constraints
-  - Development Workflow & Quality Gates
-  - Governance
+Modified sections:
+  - Technology & Security Constraints — Stack: Deployment target changed from
+    "Railway with Railpack" to "Vercel (Next.js frontend); backend hosting per
+    forthcoming ADR". Data: Qdrant location no longer "self-hosted on Railway".
+  - Technology & Security Constraints — Security: Removed reliance on Railway's
+    private network (`api.railway.internal`) for the FastAPI ↔ Next.js trust
+    boundary. Token-based auth at the FastAPI layer is now REQUIRED rather than
+    a deferred trigger, because Vercel does not provide an equivalent private
+    network between the Next.js runtime and a self-hosted FastAPI service.
 
-Removed sections: none (template placeholders replaced)
+Added sections: none
+Removed sections: none
 
 Templates reviewed:
   ✅ .specify/memory/constitution.md (this file)
-  ⚠ .specify/templates/plan-template.md — verify Constitution Check references align
-  ⚠ .specify/templates/spec-template.md — verify mandatory sections reflect principles
-  ⚠ .specify/templates/tasks-template.md — verify task categorization covers
-     observability, HITL, streaming, structured state
-  ⚠ README.md — none present yet; populate with principle summary when created
+  ⚠ .specify/templates/plan-template.md — re-verify Constitution Check still aligns
+  ⚠ docs/ADR-Amplify.md — supersede ADR-006 (private-network trust) and add new
+     ADR for Vercel deployment + backend hosting target + Qdrant relocation
+  ⚠ docs/SAD-Amplify.md — update deployment topology, auth model, Qdrant host
+  ⚠ railway.toml — remove or replace once new deployment target is finalized
+  ⚠ apps/api/middleware/auth.py — replace `X-User-Id` trust with token-based auth
+  ⚠ specs/001-research-agent/plan.md, tasks.md — refresh deployment references
 
-Deferred items: none
+Deferred items:
+  - TODO(BACKEND_HOSTING_TARGET): Vercel serverless functions are unsuitable for
+    long-lived LangGraph runs, ARQ workers, and SSE streams. Backend hosting
+    target (Fly.io, Render, AWS, etc.) MUST be selected via a new ADR before
+    the next release.
+  - TODO(QDRANT_HOSTING_TARGET): Self-hosted Qdrant must be re-platformed; ADR
+    required.
 -->
 
 # Amplify Constitution
@@ -160,21 +169,29 @@ constitution amendment.
 - Backend: FastAPI (async), LangGraph for orchestration, Prisma (prisma-client-py)
   for Postgres, Motor for MongoDB, ARQ for background jobs.
 - Data: Neon Postgres (users, sessions, integrations, preferences), MongoDB
-  (campaign documents), Qdrant self-hosted on Railway (vector store), Redis
-  (cache + ARQ queue).
+  (campaign documents), Qdrant (vector store; hosting target per forthcoming
+  ADR — see deferred items), Redis (cache + ARQ queue).
 - LLMs: Multi-provider (OpenAI GPT-4o, Anthropic Claude Sonnet, Google Nano Banana 2)
   routed per agent via `llm_router` service. No agent may hardcode a provider
   outside the router.
 - Observability: LangSmith tracing MUST be enabled in dev, staging, and production.
-- Deployment: Railway with Railpack, single monorepo, path-based service detection.
+- Deployment: Vercel hosts the Next.js frontend (App Router, Edge/Node runtimes
+  as required). The FastAPI backend, ARQ workers, and self-hosted services
+  (Qdrant, Redis) MUST run on a host that supports long-lived processes and
+  SSE; the specific target is selected per the forthcoming backend-hosting ADR.
+  The single monorepo is preserved.
 
 **Security (non-negotiable):**
 - OAuth 2.0 for all channel integrations. User credentials MUST NEVER be stored in
   plaintext. API keys and OAuth tokens MUST be encrypted at rest.
-- Authentication lives in Next.js via BetterAuth. FastAPI trusts `X-User-Id` headers
-  only over Railway's private network (`api.railway.internal`). FastAPI MUST NOT
-  be publicly exposed. If public exposure ever becomes necessary, token-based auth
-  MUST be introduced at the FastAPI layer first (per ADR-006 revisit trigger).
+- Authentication lives in Next.js via BetterAuth. Because the Vercel-hosted
+  Next.js runtime and the FastAPI backend no longer share a provider-private
+  network, FastAPI MUST authenticate every inbound request with a verifiable,
+  short-lived token (e.g., signed JWT minted by the Next.js auth layer or a
+  shared secret HMAC) at the API boundary. Bare `X-User-Id` trust is prohibited.
+  FastAPI SHOULD remain network-restricted (allow-list, VPC, or platform
+  equivalent) where the chosen host supports it; token verification is the
+  primary gate, network restriction is defense in depth.
 - Webhook endpoints MUST validate inbound signatures (HMAC or platform-equivalent)
   and are exempt from the `X-User-Id` requirement.
 - SOC 2 Type I is a 12-month post-launch target; design decisions MUST NOT
@@ -246,4 +263,4 @@ this constitution live in `docs/ADR-Amplify.md`. When an ADR is added or
 superseded, this constitution MUST be reviewed for required updates in the same
 PR.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-13 | **Last Amended**: 2026-04-13
+**Version**: 1.1.0 | **Ratified**: 2026-04-13 | **Last Amended**: 2026-04-18
