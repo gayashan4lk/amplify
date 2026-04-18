@@ -5,6 +5,6 @@ import { AuthForm } from '@/components/auth/auth-form'
 
 export default async function LoginPage() {
 	const session = await getServerSession()
-	if (session?.user?.id) redirect('/chat')
+	if (session?.user?.id) redirect('/')
 	return <AuthForm mode="login" />
 }

@@ -33,7 +33,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 				const { error } = await authClient.signIn.email({ email, password })
 				if (error) throw new Error(error.message ?? 'login failed')
 			}
-			router.push('/chat')
+			router.push('/')
 			router.refresh()
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'unknown error')
@@ -45,7 +45,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 	async function handleSocial(provider: 'github' | 'google') {
 		setError(null)
 		try {
-			await authClient.signIn.social({ provider, callbackURL: '/chat' })
+			await authClient.signIn.social({ provider, callbackURL: '/' })
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'oauth error')
 		}
@@ -53,26 +53,37 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
 	const title = mode === 'login' ? 'Sign in to Amplify' : 'Create your account'
 	const submitLabel = mode === 'login' ? 'Sign in' : 'Sign up'
-	const altHref = mode === 'login' ? '/signup' : '/login'
-	const altLabel = mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'
+	const altHref = mode === 'login' ? '/signup' : '/signin'
+	const altLabel =
+		mode === 'login'
+			? "Don't have an account? Sign up"
+			: 'Already have an account? Sign in'
 
 	return (
 		<div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-12">
 			<h1 className="mb-6 text-2xl font-semibold">{title}</h1>
 
 			<div className="mb-4 flex flex-col gap-2">
-				<Button type="button" variant="outline" onClick={() => handleSocial('github')}>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => handleSocial('github')}
+				>
 					Continue with GitHub
 				</Button>
-				<Button type="button" variant="outline" onClick={() => handleSocial('google')}>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => handleSocial('google')}
+				>
 					Continue with Google
 				</Button>
 			</div>
 
-			<div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-				<div className="h-px flex-1 bg-border" />
+			<div className="text-muted-foreground my-4 flex items-center gap-3 text-xs">
+				<div className="bg-border h-px flex-1" />
 				or
-				<div className="h-px flex-1 bg-border" />
+				<div className="bg-border h-px flex-1" />
 			</div>
 
 			<form onSubmit={handleEmail} className="flex flex-col gap-3">
@@ -80,7 +91,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 					<label className="flex flex-col gap-1 text-sm">
 						Name
 						<input
-							className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+							className="border-border bg-background h-9 rounded-md border px-3 text-sm"
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 							autoComplete="name"
@@ -92,7 +103,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 					<input
 						type="email"
 						required
-						className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+						className="border-border bg-background h-9 rounded-md border px-3 text-sm"
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
 						autoComplete="email"
@@ -104,19 +115,24 @@ export function AuthForm({ mode }: { mode: Mode }) {
 						type="password"
 						required
 						minLength={8}
-						className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+						className="border-border bg-background h-9 rounded-md border px-3 text-sm"
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
-						autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+						autoComplete={
+							mode === 'login' ? 'current-password' : 'new-password'
+						}
 					/>
 				</label>
-				{error && <p className="text-sm text-destructive">{error}</p>}
+				{error && <p className="text-destructive text-sm">{error}</p>}
 				<Button type="submit" disabled={loading}>
 					{loading ? '…' : submitLabel}
 				</Button>
 			</form>
 
-			<Link href={altHref} className="mt-4 text-center text-sm text-muted-foreground hover:underline">
+			<Link
+				href={altHref}
+				className="text-muted-foreground mt-4 text-center text-sm hover:underline"
+			>
 				{altLabel}
 			</Link>
 		</div>
