@@ -1,7 +1,9 @@
-// ContentVariantGrid ephemeral component (T038).
+// ContentVariantGrid ephemeral component (T038, T048).
 //
 // Composes two <VariantCard /> side-by-side with a diversity-warning banner
-// when the two variants turned out too similar even after one retry.
+// when the two variants turned out too similar even after one retry. Also
+// propagates per-variant regeneration caps + the onRegenerate callback so
+// each card can render its own regenerate affordance.
 
 'use client'
 
@@ -15,11 +17,19 @@ type ProgressByLabel = Partial<
 	Record<VariantLabel, { step: string; progress_hint?: number | null }>
 >
 
+type RegenerateHandler = (args: {
+	label: VariantLabel
+	additionalGuidance: string
+}) => void | Promise<void>
+
 type Props = {
 	requestId: string
 	variants: PostVariant[]
 	diversityWarning: boolean
 	progress?: ProgressByLabel
+	regenerationCaps?: Partial<Record<VariantLabel, number>>
+	onRegenerate?: RegenerateHandler
+	regeneratingLabel?: VariantLabel | null
 }
 
 export default function ContentVariantGrid({
@@ -27,9 +37,20 @@ export default function ContentVariantGrid({
 	variants,
 	diversityWarning,
 	progress = {},
+	regenerationCaps,
+	onRegenerate,
+	regeneratingLabel,
 }: Props) {
 	const byLabel = new Map<VariantLabel, PostVariant>()
 	for (const v of variants) byLabel.set(v.label, v)
+
+	const capFor = (label: VariantLabel): number | undefined => {
+		if (regenerationCaps && typeof regenerationCaps[label] === 'number') {
+			return regenerationCaps[label]
+		}
+		const v = byLabel.get(label)
+		return v ? Math.max(0, 3 - v.regenerations_used) : undefined
+	}
 
 	return (
 		<div
@@ -48,11 +69,17 @@ export default function ContentVariantGrid({
 					label="A"
 					variant={byLabel.get('A')}
 					progress={progress.A ?? null}
+					remainingRegens={capFor('A')}
+					onRegenerate={onRegenerate}
+					regenerating={regeneratingLabel === 'A'}
 				/>
 				<VariantCard
 					label="B"
 					variant={byLabel.get('B')}
 					progress={progress.B ?? null}
+					remainingRegens={capFor('B')}
+					onRegenerate={onRegenerate}
+					regenerating={regeneratingLabel === 'B'}
 				/>
 			</div>
 		</div>

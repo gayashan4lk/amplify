@@ -362,10 +362,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 					const others = m.variants.filter((v) => v.label !== ev.variant.label)
 					const progress = { ...m.progress }
 					delete progress[ev.variant.label]
+					const regeneration_caps = {
+						...m.regeneration_caps,
+						[ev.variant.label]: Math.max(0, 3 - ev.variant.regenerations_used),
+					}
 					return {
 						...m,
 						variants: [...others, ev.variant],
 						progress,
+						regeneration_caps,
 					}
 				})
 				set({ messages, seenEventIds: seen })

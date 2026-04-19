@@ -61,6 +61,7 @@ async def produce_variant(
     image_store: ImageStore,
     source_suggestion_id: str | None = None,
     additional_guidance: str | None = None,
+    regenerations_used: int = 0,
 ) -> PostVariant:
     """Produce one variant (copy + image in parallel) and emit SSE events.
 
@@ -151,6 +152,7 @@ async def produce_variant(
             image_key=image_key,
             image_signed_url=image_url,
             image_status=HalfStatus.READY,
+            regenerations_used=regenerations_used,
             source_suggestion_id=source_suggestion_id,
             generation_trace_id=trace_id,
             updated_at=datetime.now(UTC),

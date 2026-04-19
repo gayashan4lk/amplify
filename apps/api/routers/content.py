@@ -32,10 +32,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents.content_generation import _remaining_caps, run_content_generation
+from workers.content_tasks import produce_variant
 from deps import get_brief_store, get_mongo_db, get_redis
 from models.content import (
     ContentGenerationRequest,
     RequestStatus,
+    VariantLabel,
 )
 from services import resume_bus
 from services.brief_store import BriefStore
@@ -94,6 +96,11 @@ class GenerateRequestBody(BaseModel):
 
 class DirectionRequestBody(BaseModel):
     user_direction: str = Field(..., min_length=1, max_length=2000)
+
+
+class RegenerateRequestBody(BaseModel):
+    label: VariantLabel
+    additional_guidance: str | None = Field(None, max_length=2000)
 
 
 @router.post("/generate")
@@ -368,6 +375,304 @@ async def stream_content(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# Pending regeneration state stashed between POST (validates + bumps counter)
+# and GET /regenerate/stream (drives the actual run). We keep this in-process
+# because a regenerate is always consumed by the same client that initiated
+# it; a short TTL guards against orphaned entries.
+_PENDING_REGENERATE: dict[str, dict[str, Any]] = {}
+_PENDING_REGENERATE_TTL_S = 120
+
+
+def _pending_regen_key(request_id: str, label: str) -> str:
+    return f"{request_id}:{label}"
+
+
+def _stash_pending_regenerate(
+    *, request_id: str, label: str, additional_guidance: str | None, new_count: int
+) -> None:
+    _PENDING_REGENERATE[_pending_regen_key(request_id, label)] = {
+        "additional_guidance": additional_guidance,
+        "regenerations_used": new_count,
+        "at": datetime.now(UTC),
+    }
+
+
+def _consume_pending_regenerate(request_id: str, label: str) -> dict[str, Any] | None:
+    entry = _PENDING_REGENERATE.pop(_pending_regen_key(request_id, label), None)
+    if entry is None:
+        return None
+    age = (datetime.now(UTC) - entry["at"]).total_seconds()
+    if age > _PENDING_REGENERATE_TTL_S:
+        return None
+    return entry
+
+
+@router.post("/{request_id}/regenerate")
+async def regenerate_variant(
+    request_id: str,
+    body: RegenerateRequestBody,
+    request: Request,
+) -> Any:
+    """Regenerate a single variant (A or B).
+
+    Validates ownership, acquires the in-flight lock, and atomically bumps the
+    per-variant `regenerations_used` (cap 3). Returns `{regenerations_used,
+    sse_endpoint}` — the client opens the SSE endpoint next to stream the new
+    `content_variant_*` events. `additional_guidance` is threaded into both
+    the copy and image prompts via a short-lived in-process stash.
+    """
+
+    user_id = await _require_user(request)
+    content_store = await _get_content_store(request)
+    inflight = await _get_inflight_lock(request)
+
+    existing = await content_store.get(request_id=request_id, user_id=user_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="request_not_found")
+
+    if existing.status != RequestStatus.COMPLETE:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "regenerate_not_ready",
+                    "message": "Regeneration is only available once the initial run is complete.",
+                    "recoverable": False,
+                }
+            },
+        )
+
+    if await inflight.is_locked(existing.brief_id):
+        return JSONResponse(
+            status_code=202,
+            content={"already_running": True, "request_id": request_id},
+        )
+
+    acquired = await inflight.acquire(existing.brief_id)
+    if not acquired:
+        return JSONResponse(
+            status_code=202,
+            content={"already_running": True, "request_id": request_id},
+        )
+
+    try:
+        new_count = await content_store.increment_regenerations_used(
+            request_id=request_id, user_id=user_id, label=body.label
+        )
+    except Exception:
+        await inflight.release(existing.brief_id)
+        raise
+
+    if new_count is None:
+        await inflight.release(existing.brief_id)
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "regeneration_cap_reached",
+                    "message": "No regenerations left for this variant.",
+                    "recoverable": False,
+                }
+            },
+        )
+
+    _stash_pending_regenerate(
+        request_id=request_id,
+        label=body.label,
+        additional_guidance=body.additional_guidance,
+        new_count=new_count,
+    )
+
+    return {
+        "regenerations_used": new_count,
+        "sse_endpoint": (
+            f"/api/v1/content/{request_id}/regenerate/stream?label={body.label}"
+        ),
+    }
+
+
+@router.get("/{request_id}/regenerate/stream")
+async def stream_regenerate(
+    request_id: str,
+    request: Request,
+    label: VariantLabel = Query(...),
+    briefs: BriefStore = Depends(get_brief_store),
+) -> StreamingResponse:
+    user_id = await _require_user(request)
+    content_store = await _get_content_store(request)
+    inflight = await _get_inflight_lock(request)
+    image_store = _get_image_store(request)
+
+    existing = await content_store.get(request_id=request_id, user_id=user_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="request_not_found")
+
+    pending = _consume_pending_regenerate(request_id, label)
+    if pending is None:
+        # No POST preceded this stream, or it expired. Release the lock if we
+        # happen to hold it (we shouldn't, but guard anyway).
+        raise HTTPException(status_code=409, detail="regenerate_not_pending")
+
+    additional_guidance = pending.get("additional_guidance")
+    new_count = int(pending.get("regenerations_used", 0))
+
+    brief = await briefs.get(brief_id=existing.brief_id, user_id=user_id)
+    if brief is None:
+        await inflight.release(existing.brief_id)
+        raise HTTPException(status_code=404, detail="brief_not_found")
+    brief_findings_raw = [f.model_dump(mode="json") for f in brief.findings]
+    findings_for_tools = [
+        {
+            "id": f.get("id", ""),
+            "claim": f.get("claim", ""),
+            "confidence": f.get("confidence", ""),
+        }
+        for f in brief_findings_raw
+    ]
+
+    user_direction = existing.user_direction or ""
+    brief_id = existing.brief_id
+    conversation_id = existing.conversation_id
+    source_suggestion_id = next(
+        (v.source_suggestion_id for v in existing.variants if v.label == label), None
+    )
+
+    async def sse_gen():
+        alloc = SseEventIdAllocator()
+
+        def _emit(event: SseEvent) -> str:
+            return format_sse_frame(alloc.next(), event)
+
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def sink(name: str, data: dict[str, Any]) -> None:
+            await queue.put({"name": name, "data": data})
+
+        async def _runner() -> None:
+            token = set_sink(sink)
+            try:
+                try:
+                    await produce_variant(
+                        request_id=request_id,
+                        user_id=user_id,
+                        label=label,
+                        brief_findings=findings_for_tools,
+                        user_direction=user_direction,
+                        content_store=content_store,
+                        image_store=image_store,
+                        source_suggestion_id=source_suggestion_id,
+                        additional_guidance=additional_guidance,
+                        regenerations_used=new_count,
+                    )
+                except Exception:
+                    log.exception("regenerate produce_variant failed")
+                    await queue.put(
+                        {
+                            "name": "content_error",
+                            "data": {
+                                "code": "content_gen_blocked",
+                                "message": "Regeneration failed — please try again.",
+                                "recoverable": True,
+                                "failure_record_id": "",
+                            },
+                        }
+                    )
+            finally:
+                reset_sink(token)
+                await inflight.release(brief_id)
+                await queue.put(None)
+
+        task = asyncio.create_task(_runner())
+
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                name = item["name"]
+                data = item["data"]
+                now = datetime.now(UTC)
+                try:
+                    if name == "content_variant_progress":
+                        yield _emit(
+                            ContentVariantProgress(
+                                conversation_id=conversation_id,
+                                at=now,
+                                request_id=request_id,
+                                variant_label=data.get("variant_label", label),
+                                step=data.get("step", ""),
+                                progress_hint=data.get("progress_hint"),
+                            )
+                        )
+                    elif name == "content_variant_ready":
+                        yield _emit(
+                            ContentVariantReady(
+                                conversation_id=conversation_id,
+                                at=now,
+                                request_id=request_id,
+                                variant=data.get("variant"),  # type: ignore[arg-type]
+                            )
+                        )
+                    elif name == "content_variant_partial":
+                        yield _emit(
+                            ContentVariantPartial(
+                                conversation_id=conversation_id,
+                                at=now,
+                                request_id=request_id,
+                                variant_label=data.get("variant_label", label),
+                                description_status=data.get(
+                                    "description_status", "pending"
+                                ),
+                                image_status=data.get("image_status", "pending"),
+                                description=data.get("description"),
+                                image_signed_url=data.get("image_signed_url"),
+                                retry_target=data.get("retry_target", "image"),
+                            )
+                        )
+                    elif name == "content_error":
+                        yield _emit(
+                            ErrorEvent(
+                                conversation_id=conversation_id,
+                                at=now,
+                                code=data.get("code"),  # type: ignore[arg-type]
+                                message=data.get("message", "Regeneration failed."),
+                                recoverable=data.get("recoverable", False),
+                                failure_record_id=data.get("failure_record_id", ""),
+                                trace_id=data.get("trace_id"),
+                            )
+                        )
+                except Exception:
+                    log.exception(
+                        "failed to emit regenerate sse frame name=%s", name
+                    )
+
+            with contextlib.suppress(Exception):
+                await task
+
+            yield _emit(
+                Done(
+                    conversation_id=conversation_id,
+                    at=datetime.now(UTC),
+                    final_status="brief_ready",
+                    summary=f"regenerate variant {label} complete",
+                )
+            )
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        sse_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Regenerations-Used": str(new_count),
         },
     )
 

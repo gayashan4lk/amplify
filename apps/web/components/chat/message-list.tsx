@@ -3,6 +3,7 @@
 
 'use client'
 
+import { useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -14,6 +15,7 @@ import IntelligenceBrief from '@/components/ephemeral/intelligence-brief'
 import FailureCard from '@/components/chat/failure-card'
 import { useChatStore } from '@/lib/stores/chat-store'
 import { SseClient } from '@/lib/sse-client'
+import type { VariantLabel } from '@/lib/schemas/content'
 import type { SseEvent } from '@/lib/types/sse-events'
 import AgentStatus from "./agent-status"
 
@@ -38,6 +40,47 @@ export default function MessageList() {
 			onEvent: (id, ev: SseEvent) => applyEvent(id, ev),
 		})
 		client.start()
+	}
+
+	const [regeneratingByRequest, setRegeneratingByRequest] = useState<
+		Record<string, VariantLabel | null>
+	>({})
+
+	async function handleRegenerate(
+		requestId: string,
+		args: { label: VariantLabel; additionalGuidance: string },
+	) {
+		const { label, additionalGuidance } = args
+		if (regeneratingByRequest[requestId]) return
+		setRegeneratingByRequest((prev) => ({ ...prev, [requestId]: label }))
+		try {
+			const resp = await fetch(`/api/v1/content/${requestId}/regenerate`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					label,
+					additional_guidance: additionalGuidance || null,
+				}),
+			})
+			if (!resp.ok) {
+				// 202/409/404: nothing to stream. Caps/state stay as-is.
+				return
+			}
+			const data = (await resp.json()) as {
+				sse_endpoint: string
+				regenerations_used: number
+			}
+			const client = new SseClient({
+				url: data.sse_endpoint,
+				onEvent: (id, ev: SseEvent) => applyEvent(id, ev),
+				onClose: () =>
+					setRegeneratingByRequest((prev) => ({ ...prev, [requestId]: null })),
+			})
+			client.start()
+		} catch {
+			setRegeneratingByRequest((prev) => ({ ...prev, [requestId]: null }))
+		}
 	}
 
 	return (
@@ -113,6 +156,9 @@ export default function MessageList() {
 									variants={m.variants}
 									diversityWarning={m.diversity_warning}
 									progress={m.progress}
+									regenerationCaps={m.regeneration_caps}
+									regeneratingLabel={regeneratingByRequest[m.request_id] ?? null}
+									onRegenerate={(args) => handleRegenerate(m.request_id, args)}
 								/>
 							</li>
 						)

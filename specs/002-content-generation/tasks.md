@@ -110,10 +110,10 @@ description: "Task list for 002-content-generation"
 
 ### Implementation for User Story 2
 
-- [ ] T045 [US2] Implement `POST /api/v1/content/{request_id}/regenerate`: validate label, check cap via `regenerations_used`, acquire in-flight lock, atomically increment counter in `content_store`, enqueue single-variant ARQ job, return `{regenerations_used}` or 409 `regeneration_cap_reached`, in apps/api/routers/content.py (depends on T011, T029)
-- [ ] T046 [US2] Extend `produce_variant` ARQ task to accept `additional_guidance` and reuse it in the Haiku prompt + image prompt for the target variant only, in apps/api/workers/content_tasks.py
-- [ ] T047 [US2] Add regenerate button + optional guidance textbox to `<VariantCard />`, disabled when `regeneration_caps[label] == 0`, with server-returned remaining count updating UI state, in apps/web/components/ephemeral/variant-card.tsx (depends on T037)
-- [ ] T048 [US2] Propagate updated regeneration caps from `ContentVariantGrid` payload through ephemeral event handling in apps/web/components/chat/stream-renderer.tsx
+- [X] T045 [US2] Implement `POST /api/v1/content/{request_id}/regenerate`: validate label, check cap via `regenerations_used`, acquire in-flight lock, atomically increment counter in `content_store`, enqueue single-variant ARQ job, return `{regenerations_used}` or 409 `regeneration_cap_reached`, in apps/api/routers/content.py (depends on T011, T029)
+- [X] T046 [US2] Extend `produce_variant` ARQ task to accept `additional_guidance` and reuse it in the Haiku prompt + image prompt for the target variant only, in apps/api/workers/content_tasks.py
+- [X] T047 [US2] Add regenerate button + optional guidance textbox to `<VariantCard />`, disabled when `regeneration_caps[label] == 0`, with server-returned remaining count updating UI state, in apps/web/components/ephemeral/variant-card.tsx (depends on T037)
+- [X] T048 [US2] Propagate updated regeneration caps from `ContentVariantGrid` payload through ephemeral event handling in apps/web/components/chat/stream-renderer.tsx
 
 **Checkpoint**: User Stories 1 AND 2 work independently — users can iterate on individual variants.
 
