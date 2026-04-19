@@ -62,18 +62,33 @@ RUN_TIMEOUT_SECONDS = 180
 DIRECTION_TIMEOUT_SECONDS = 300
 
 
+class _RawSuggestion(BaseModel):
+    """Lenient LLM-facing version of `PostSuggestion`.
+
+    Why: the LLM occasionally exceeds the 140-char cap. We accept longer
+    text here and truncate before constructing the strict `PostSuggestion`
+    rather than failing the whole run.
+    """
+
+    id: str | None = None
+    text: str = Field(..., min_length=1)
+    finding_ids: list[str] = Field(default_factory=list)
+    low_confidence: bool = False
+
+
 class _SuggestionBundle(BaseModel):
     """LLM-structured output for the suggestion step."""
 
-    suggestions: list[PostSuggestion] = Field(..., min_length=2, max_length=4)
+    suggestions: list[_RawSuggestion] = Field(..., min_length=2, max_length=6)
     question: str = Field(..., min_length=1, max_length=500)
 
 
 SUGGESTION_PROMPT = """You are the Content Generation Agent's suggestion step.
 Given the provided intelligence brief findings, propose 2-4 short Facebook-post \
-angles the user could run with. Each suggestion must reference the ids of \
-specific findings it draws on (`finding_ids`). Mark `low_confidence` true \
-when the brief has <3 findings or no high-confidence finding.
+angles the user could run with. Each suggestion's `text` MUST be at most 140 \
+characters (hard limit — count carefully). Each suggestion must reference the \
+ids of specific findings it draws on (`finding_ids`). Mark `low_confidence` \
+true when the brief has <3 findings or no high-confidence finding.
 
 After the suggestions, write ONE consolidated creative-direction question the \
 user should answer — it MUST ask them to pick (or describe) the angle AND \
@@ -120,7 +135,7 @@ async def _emit_suggestions_event(
 
 async def _run_suggestion_step(
     *, brief_findings: list[dict[str, Any]]
-) -> _SuggestionBundle:
+) -> tuple[list[PostSuggestion], str]:
     """Produce grounded suggestions + a consolidated question.
 
     Uses `content_copy` Haiku for determinism parity with the drafter. Any
@@ -150,20 +165,26 @@ async def _run_suggestion_step(
         kept_ids = [fid for fid in s.finding_ids if fid in valid_ids]
         if not kept_ids:
             continue
+        text = s.text.strip().strip('"').strip("'")
+        if len(text) > 140:
+            log.warning(
+                "suggestion text exceeded 140 chars; truncating (orig_len=%d)",
+                len(s.text),
+            )
+            text = text[:139].rstrip() + "…"
         cleaned.append(
             PostSuggestion(
                 id=s.id or f"s-{idx}",
-                text=s.text,
+                text=text,
                 finding_ids=kept_ids,
-                low_confidence=s.low_confidence
-                or len(brief_findings) < 3,
+                low_confidence=s.low_confidence or len(brief_findings) < 3,
             )
         )
     if len(cleaned) < 2:
         raise ValueError("suggestion step produced fewer than 2 grounded suggestions")
     if len(cleaned) > 4:
         cleaned = cleaned[:4]
-    return _SuggestionBundle(suggestions=cleaned, question=bundle.question)
+    return cleaned, bundle.question
 
 
 def _remaining_caps(variants: list[PostVariant]) -> dict[str, int]:
@@ -235,8 +256,10 @@ async def run_content_generation(
     try:
         async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
             # 1) Suggestions
-            bundle = await _run_suggestion_step(brief_findings=brief_findings)
-            request.suggestions = bundle.suggestions
+            suggestions, question = await _run_suggestion_step(
+                brief_findings=brief_findings
+            )
+            request.suggestions = suggestions
             await content_store.update_status(
                 request_id=request_id,
                 user_id=request.user_id,
@@ -245,12 +268,12 @@ async def run_content_generation(
             # Persist the suggestions list itself.
             await _persist_suggestions(
                 content_store, request_id=request_id, user_id=request.user_id,
-                suggestions=bundle.suggestions,
+                suggestions=suggestions,
             )
             await _emit_suggestions_event(
                 request_id=request_id,
-                suggestions=bundle.suggestions,
-                question=bundle.question,
+                suggestions=suggestions,
+                question=question,
             )
 
             # 2) Wait for user direction
