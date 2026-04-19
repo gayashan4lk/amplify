@@ -226,6 +226,18 @@ async def run_content_generation(
     request_id = request.id
     trace_id = get_current_trace_id() or f"tr_{uuid4().hex[:12]}"
 
+    log.info(
+        "content_generation_run_start",
+        extra={
+            "step": "content_generation_run_start",
+            "request_id": request_id,
+            "brief_id": request.brief_id,
+            "user_id": request.user_id,
+            "trace_id": trace_id,
+            "findings_count": len(brief_findings),
+        },
+    )
+
     async def _fail(*, code: FailureCode, message: str, recoverable: bool) -> None:
         record = await record_content_failure(
             prisma=prisma,

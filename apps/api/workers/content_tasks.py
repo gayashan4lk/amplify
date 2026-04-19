@@ -71,6 +71,17 @@ async def produce_variant(
     """
 
     trace_id = get_current_trace_id() or ""
+    log.info(
+        "produce_variant dispatch",
+        extra={
+            "step": "produce_variant_dispatch",
+            "request_id": request_id,
+            "variant_label": label,
+            "trace_id": trace_id,
+            "regenerations_used": regenerations_used,
+            "has_guidance": additional_guidance is not None,
+        },
+    )
     await _emit_progress(request_id=request_id, label=label, step="starting", hint=0.05)
 
     async def _copy() -> tuple[str | None, Exception | None]:
@@ -83,6 +94,7 @@ async def produce_variant(
                 user_direction=user_direction,
                 variant_label=label,
                 additional_guidance=additional_guidance,
+                request_id=request_id,
             )
             await _emit_progress(
                 request_id=request_id, label=label, step="copy ready", hint=0.55
@@ -187,4 +199,134 @@ async def produce_variant(
     raise err
 
 
-__all__ = ["produce_variant"]
+async def retry_variant_half(
+    *,
+    request_id: str,
+    user_id: str,
+    label: VariantLabel,
+    target: str,
+    brief_findings: list[dict[str, str]],
+    user_direction: str,
+    content_store: ContentStore,
+    image_store: ImageStore,
+    existing_description: str | None,
+    existing_image_key: str | None,
+    existing_image_url: str | None,
+    existing_description_status: HalfStatus,
+    existing_image_status: HalfStatus,
+    source_suggestion_id: str | None = None,
+    regenerations_used: int = 0,
+    additional_guidance: str | None = None,
+) -> PostVariant | None:
+    """Retry only the failing half (description OR image).
+
+    Does NOT bump `regenerations_used` — this is meant for transient
+    provider flakes, not user-initiated iteration. Re-emits
+    `content_variant_ready` when both halves now succeed, or
+    `content_variant_partial` if the retry itself failed.
+    """
+
+    trace_id = get_current_trace_id() or ""
+    if target not in {"description", "image"}:
+        raise ValueError(f"unknown retry target: {target!r}")
+
+    await _emit_progress(
+        request_id=request_id, label=label, step=f"retrying {target}", hint=0.2
+    )
+
+    new_description = existing_description
+    new_image_key = existing_image_key
+    new_image_url = existing_image_url
+    new_description_status = existing_description_status
+    new_image_status = existing_image_status
+
+    if target == "description":
+        try:
+            result = await generate_copy(
+                brief_findings=brief_findings,
+                user_direction=user_direction,
+                variant_label=label,
+                additional_guidance=additional_guidance,
+                request_id=request_id,
+            )
+            new_description = result.text
+            new_description_status = HalfStatus.READY
+        except ContentSafetyBlocked:
+            raise
+        except Exception as exc:
+            log.exception("retry description failed")
+            new_description_status = HalfStatus.FAILED
+            _last_err: Exception | None = exc
+        else:
+            _last_err = None
+    else:  # target == "image"
+        try:
+            result = await generate_image(
+                brief_findings=brief_findings,
+                user_direction=user_direction,
+                variant_label=label,
+                image_store=image_store,
+                request_id=request_id,
+                additional_guidance=additional_guidance,
+            )
+            new_image_key = result.image_key
+            new_image_url = result.signed_url
+            new_image_status = HalfStatus.READY
+        except ContentSafetyBlocked:
+            raise
+        except Exception as exc:
+            log.exception("retry image failed")
+            new_image_status = HalfStatus.FAILED
+            _last_err = exc
+        else:
+            _last_err = None
+
+    if (
+        new_description_status == HalfStatus.READY
+        and new_image_status == HalfStatus.READY
+        and new_description is not None
+        and new_image_key is not None
+        and new_image_url is not None
+    ):
+        variant = PostVariant(
+            label=label,
+            description=new_description,
+            description_status=HalfStatus.READY,
+            image_key=new_image_key,
+            image_signed_url=new_image_url,
+            image_status=HalfStatus.READY,
+            regenerations_used=regenerations_used,
+            source_suggestion_id=source_suggestion_id,
+            generation_trace_id=trace_id,
+            updated_at=datetime.now(UTC),
+        )
+        await content_store.upsert_variant(
+            request_id=request_id, user_id=user_id, variant=variant
+        )
+        await _safe_dispatch(
+            "content_variant_ready",
+            {"request_id": request_id, "variant": variant.model_dump(mode="json")},
+        )
+        return variant
+
+    retry_target = (
+        "description" if new_description_status == HalfStatus.FAILED else "image"
+    )
+    await _safe_dispatch(
+        "content_variant_partial",
+        {
+            "request_id": request_id,
+            "variant_label": label,
+            "description_status": new_description_status.value,
+            "image_status": new_image_status.value,
+            "description": new_description,
+            "image_signed_url": new_image_url,
+            "retry_target": retry_target,
+        },
+    )
+    if _last_err is not None:
+        raise _last_err
+    return None
+
+
+__all__ = ["produce_variant", "retry_variant_half"]

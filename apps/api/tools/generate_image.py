@@ -174,11 +174,16 @@ async def generate_image(
     )
     latency_ms = int((time.monotonic() - t0) * 1000)
     log.info(
-        "generate_image ok variant=%s bytes=%s letterboxed=%s latency_ms=%s",
-        variant_label,
-        len(data),
-        letterboxed,
-        latency_ms,
+        "generate_image ok",
+        extra={
+            "step": "generate_image",
+            "request_id": request_id,
+            "variant_label": variant_label,
+            "bytes": len(data),
+            "letterboxed": letterboxed,
+            "latency_ms": latency_ms,
+            "model": "nano-banana-2",
+        },
     )
     return ImageResult(
         image_key=key,

@@ -22,6 +22,11 @@ type RegenerateHandler = (args: {
 	additionalGuidance: string
 }) => void | Promise<void>
 
+type RetryHalfHandler = (args: {
+	label: VariantLabel
+	target: 'description' | 'image'
+}) => void | Promise<void>
+
 type Props = {
 	requestId: string
 	variants: PostVariant[]
@@ -30,6 +35,8 @@ type Props = {
 	regenerationCaps?: Partial<Record<VariantLabel, number>>
 	onRegenerate?: RegenerateHandler
 	regeneratingLabel?: VariantLabel | null
+	onRetryHalf?: RetryHalfHandler
+	retryingByLabel?: Partial<Record<VariantLabel, 'description' | 'image' | null>>
 }
 
 export default function ContentVariantGrid({
@@ -40,6 +47,8 @@ export default function ContentVariantGrid({
 	regenerationCaps,
 	onRegenerate,
 	regeneratingLabel,
+	onRetryHalf,
+	retryingByLabel,
 }: Props) {
 	const byLabel = new Map<VariantLabel, PostVariant>()
 	for (const v of variants) byLabel.set(v.label, v)
@@ -65,22 +74,19 @@ export default function ContentVariantGrid({
 				</div>
 			)}
 			<div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-				<VariantCard
-					label="A"
-					variant={byLabel.get('A')}
-					progress={progress.A ?? null}
-					remainingRegens={capFor('A')}
-					onRegenerate={onRegenerate}
-					regenerating={regeneratingLabel === 'A'}
-				/>
-				<VariantCard
-					label="B"
-					variant={byLabel.get('B')}
-					progress={progress.B ?? null}
-					remainingRegens={capFor('B')}
-					onRegenerate={onRegenerate}
-					regenerating={regeneratingLabel === 'B'}
-				/>
+				{(['A', 'B'] as const).map((l) => (
+					<VariantCard
+						key={l}
+						label={l}
+						variant={byLabel.get(l)}
+						progress={progress[l] ?? null}
+						remainingRegens={capFor(l)}
+						onRegenerate={onRegenerate}
+						regenerating={regeneratingLabel === l}
+						onRetryHalf={onRetryHalf}
+						retryingHalf={retryingByLabel?.[l] ?? null}
+					/>
+				))}
 			</div>
 		</div>
 	)

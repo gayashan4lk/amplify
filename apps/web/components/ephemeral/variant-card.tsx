@@ -1,9 +1,13 @@
-// VariantCard ephemeral component (T037, T047).
+// VariantCard ephemeral component (T037, T047, T051, T052).
 //
 // Renders one Facebook post variant: a 1:1 image, the description copy, and
 // per-half status badges (description + image). When `onRegenerate` is
 // provided, also renders a regenerate affordance (button + optional guidance
 // textbox) that is disabled once `remainingRegens` hits 0.
+//
+// Also exposes copy-description and download-image actions whenever both
+// halves are ready. The download path tolerates signed-URL expiry by
+// refreshing through `GET /api/v1/content/image/{image_key}` on 403.
 
 'use client'
 
@@ -18,6 +22,8 @@ type Props = {
 	remainingRegens?: number
 	onRegenerate?: (args: { label: VariantLabel; additionalGuidance: string }) => void | Promise<void>
 	regenerating?: boolean
+	onRetryHalf?: (args: { label: VariantLabel; target: 'description' | 'image' }) => void | Promise<void>
+	retryingHalf?: 'description' | 'image' | null
 }
 
 const statusClass: Record<HalfStatus, string> = {
@@ -33,6 +39,8 @@ export default function VariantCard({
 	remainingRegens,
 	onRegenerate,
 	regenerating,
+	onRetryHalf,
+	retryingHalf,
 }: Props) {
 	const description = variant?.description ?? ''
 	const descriptionStatus: HalfStatus = variant?.description_status ?? 'pending'
@@ -41,6 +49,62 @@ export default function VariantCard({
 
 	const [showGuidance, setShowGuidance] = useState(false)
 	const [guidance, setGuidance] = useState('')
+	const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+	const [downloading, setDownloading] = useState(false)
+
+	const bothReady = descriptionStatus === 'ready' && imageStatus === 'ready'
+
+	async function handleCopy() {
+		if (!description) return
+		try {
+			await navigator.clipboard.writeText(description)
+			setCopyState('copied')
+			setTimeout(() => setCopyState('idle'), 1500)
+		} catch {
+			setCopyState('error')
+			setTimeout(() => setCopyState('idle'), 1500)
+		}
+	}
+
+	async function fetchImageBlob(url: string): Promise<Blob> {
+		const resp = await fetch(url, { credentials: 'omit' })
+		if (resp.status === 403 && variant?.image_key) {
+			// Signed URL may have expired — refresh and retry once.
+			const refreshed = await fetch(
+				`/api/v1/content/image/${encodeURIComponent(variant.image_key)}`,
+				{ credentials: 'include' },
+			)
+			if (!refreshed.ok) throw new Error('refresh_failed')
+			const data = (await refreshed.json()) as { signed_url: string }
+			const retry = await fetch(data.signed_url, { credentials: 'omit' })
+			if (!retry.ok) throw new Error('download_failed')
+			return await retry.blob()
+		}
+		if (!resp.ok) throw new Error('download_failed')
+		return await resp.blob()
+	}
+
+	async function handleDownload() {
+		if (!imageUrl || !bothReady || downloading) return
+		setDownloading(true)
+		try {
+			const blob = await fetchImageBlob(imageUrl)
+			const mime = blob.type || 'image/png'
+			const ext = mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : 'png'
+			const objectUrl = URL.createObjectURL(blob)
+			const a = document.createElement('a')
+			a.href = objectUrl
+			a.download = `variant-${label}.${ext}`
+			document.body.appendChild(a)
+			a.click()
+			a.remove()
+			setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+		} catch {
+			// Silent failure — user can retry.
+		} finally {
+			setDownloading(false)
+		}
+	}
 
 	const capKnown = typeof remainingRegens === 'number'
 	const disabledRegen =
@@ -116,6 +180,57 @@ export default function VariantCard({
 							<> · {Math.round(progress.progress_hint * 100)}%</>
 						)}
 					</p>
+				)}
+				{(descriptionStatus === 'failed' || imageStatus === 'failed') && onRetryHalf && (
+					<div className="flex items-center gap-2 pt-2">
+						{descriptionStatus === 'failed' && (
+							<button
+								type="button"
+								onClick={() => onRetryHalf({ label, target: 'description' })}
+								disabled={retryingHalf === 'description'}
+								data-testid={`retry-description-${label}`}
+								className="rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-900 hover:bg-red-100 disabled:pointer-events-none disabled:opacity-40"
+							>
+								{retryingHalf === 'description' ? 'Retrying…' : 'Retry description'}
+							</button>
+						)}
+						{imageStatus === 'failed' && (
+							<button
+								type="button"
+								onClick={() => onRetryHalf({ label, target: 'image' })}
+								disabled={retryingHalf === 'image'}
+								data-testid={`retry-image-${label}`}
+								className="rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-900 hover:bg-red-100 disabled:pointer-events-none disabled:opacity-40"
+							>
+								{retryingHalf === 'image' ? 'Retrying…' : 'Retry image'}
+							</button>
+						)}
+					</div>
+				)}
+				{bothReady && (
+					<div className="flex items-center gap-2 pt-2">
+						<button
+							type="button"
+							onClick={handleCopy}
+							data-testid={`copy-description-${label}`}
+							className="rounded-md border bg-background px-3 py-1 text-xs font-medium hover:bg-accent"
+						>
+							{copyState === 'copied'
+								? 'Copied ✓'
+								: copyState === 'error'
+									? 'Copy failed'
+									: 'Copy description'}
+						</button>
+						<button
+							type="button"
+							onClick={handleDownload}
+							disabled={downloading}
+							data-testid={`download-image-${label}`}
+							className="rounded-md border bg-background px-3 py-1 text-xs font-medium hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+						>
+							{downloading ? 'Downloading…' : 'Download image'}
+						</button>
+					</div>
 				)}
 				{onRegenerate && (
 					<div className="mt-auto flex flex-col gap-2 pt-2">

@@ -25,17 +25,18 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents.content_generation import _remaining_caps, run_content_generation
-from workers.content_tasks import produce_variant
+from workers.content_tasks import produce_variant, retry_variant_half
 from deps import get_brief_store, get_mongo_db, get_redis
 from models.content import (
     ContentGenerationRequest,
+    HalfStatus,
     RequestStatus,
     VariantLabel,
 )
@@ -101,6 +102,11 @@ class DirectionRequestBody(BaseModel):
 class RegenerateRequestBody(BaseModel):
     label: VariantLabel
     additional_guidance: str | None = Field(None, max_length=2000)
+
+
+class RetryHalfRequestBody(BaseModel):
+    label: VariantLabel
+    target: Literal["description", "image"]
 
 
 @router.post("/generate")
@@ -520,6 +526,18 @@ async def stream_regenerate(
     additional_guidance = pending.get("additional_guidance")
     new_count = int(pending.get("regenerations_used", 0))
 
+    log.info(
+        "content_regenerate_dispatch",
+        extra={
+            "step": "content_regenerate_dispatch",
+            "request_id": request_id,
+            "variant_label": label,
+            "user_id": user_id,
+            "regenerations_used": new_count,
+            "has_guidance": bool(additional_guidance),
+        },
+    )
+
     brief = await briefs.get(brief_id=existing.brief_id, user_id=user_id)
     if brief is None:
         await inflight.release(existing.brief_id)
@@ -673,6 +691,288 @@ async def stream_regenerate(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
             "X-Regenerations-Used": str(new_count),
+        },
+    )
+
+
+# Pending retry-half state, same pattern as regenerate.
+_PENDING_RETRY_HALF: dict[str, dict[str, Any]] = {}
+
+
+def _retry_half_key(request_id: str, label: str) -> str:
+    return f"{request_id}:{label}"
+
+
+def _stash_pending_retry_half(
+    *,
+    request_id: str,
+    label: str,
+    target: str,
+    existing: ContentGenerationRequest,
+) -> None:
+    variant = next((v for v in existing.variants if v.label == label), None)
+    _PENDING_RETRY_HALF[_retry_half_key(request_id, label)] = {
+        "target": target,
+        "existing_description": variant.description if variant else None,
+        "existing_image_key": variant.image_key if variant else None,
+        "existing_image_url": variant.image_signed_url if variant else None,
+        "existing_description_status": (
+            variant.description_status if variant else HalfStatus.PENDING
+        ),
+        "existing_image_status": (
+            variant.image_status if variant else HalfStatus.PENDING
+        ),
+        "regenerations_used": variant.regenerations_used if variant else 0,
+        "source_suggestion_id": variant.source_suggestion_id if variant else None,
+        "at": datetime.now(UTC),
+    }
+
+
+def _consume_pending_retry_half(request_id: str, label: str) -> dict[str, Any] | None:
+    entry = _PENDING_RETRY_HALF.pop(_retry_half_key(request_id, label), None)
+    if entry is None:
+        return None
+    age = (datetime.now(UTC) - entry["at"]).total_seconds()
+    if age > _PENDING_REGENERATE_TTL_S:
+        return None
+    return entry
+
+
+@router.post("/{request_id}/retry-half")
+async def retry_half(
+    request_id: str,
+    body: RetryHalfRequestBody,
+    request: Request,
+) -> Any:
+    """Retry the failing half (description OR image) of a variant without
+    incrementing `regenerations_used`. Returns `{sse_endpoint}` the client
+    opens next to stream the replacement events."""
+
+    user_id = await _require_user(request)
+    content_store = await _get_content_store(request)
+    inflight = await _get_inflight_lock(request)
+
+    existing = await content_store.get(request_id=request_id, user_id=user_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="request_not_found")
+
+    variant = next((v for v in existing.variants if v.label == body.label), None)
+    half_status = (
+        variant.description_status
+        if variant and body.target == "description"
+        else (variant.image_status if variant else HalfStatus.PENDING)
+    )
+    # Only retriable when the variant actually exists in a partial state for
+    # the target half. If both halves are ready there is nothing to retry.
+    if variant is None or half_status != HalfStatus.FAILED:
+        # Also allow retrying when the agent never persisted a variant because
+        # the half failed on first run — detect that from the request status.
+        if not (
+            variant is None
+            and existing.status in {RequestStatus.COMPLETE, RequestStatus.GENERATING}
+        ):
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": {
+                        "code": "not_partial",
+                        "message": "Nothing to retry — the variant is not in a failed state.",
+                        "recoverable": False,
+                    }
+                },
+            )
+
+    if await inflight.is_locked(existing.brief_id):
+        return JSONResponse(
+            status_code=202,
+            content={"already_running": True, "request_id": request_id},
+        )
+
+    acquired = await inflight.acquire(existing.brief_id)
+    if not acquired:
+        return JSONResponse(
+            status_code=202,
+            content={"already_running": True, "request_id": request_id},
+        )
+
+    _stash_pending_retry_half(
+        request_id=request_id,
+        label=body.label,
+        target=body.target,
+        existing=existing,
+    )
+
+    return {
+        "status": "queued",
+        "sse_endpoint": (
+            f"/api/v1/content/{request_id}/retry-half/stream?label={body.label}"
+        ),
+    }
+
+
+@router.get("/{request_id}/retry-half/stream")
+async def stream_retry_half(
+    request_id: str,
+    request: Request,
+    label: VariantLabel = Query(...),
+    briefs: BriefStore = Depends(get_brief_store),
+) -> StreamingResponse:
+    user_id = await _require_user(request)
+    content_store = await _get_content_store(request)
+    inflight = await _get_inflight_lock(request)
+    image_store = _get_image_store(request)
+
+    existing = await content_store.get(request_id=request_id, user_id=user_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="request_not_found")
+
+    pending = _consume_pending_retry_half(request_id, label)
+    if pending is None:
+        raise HTTPException(status_code=409, detail="retry_half_not_pending")
+
+    brief = await briefs.get(brief_id=existing.brief_id, user_id=user_id)
+    if brief is None:
+        await inflight.release(existing.brief_id)
+        raise HTTPException(status_code=404, detail="brief_not_found")
+    brief_findings_raw = [f.model_dump(mode="json") for f in brief.findings]
+    findings_for_tools = [
+        {
+            "id": f.get("id", ""),
+            "claim": f.get("claim", ""),
+            "confidence": f.get("confidence", ""),
+        }
+        for f in brief_findings_raw
+    ]
+
+    user_direction = existing.user_direction or ""
+    brief_id = existing.brief_id
+    conversation_id = existing.conversation_id
+    target = str(pending["target"])
+    existing_description = pending.get("existing_description")
+    existing_image_key = pending.get("existing_image_key")
+    existing_image_url = pending.get("existing_image_url")
+    existing_description_status = HalfStatus(
+        pending.get("existing_description_status", HalfStatus.PENDING)
+    )
+    existing_image_status = HalfStatus(
+        pending.get("existing_image_status", HalfStatus.PENDING)
+    )
+    source_suggestion_id = pending.get("source_suggestion_id")
+    regenerations_used = int(pending.get("regenerations_used", 0))
+
+    async def sse_gen():
+        alloc = SseEventIdAllocator()
+
+        def _emit(event: SseEvent) -> str:
+            return format_sse_frame(alloc.next(), event)
+
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def sink(name: str, data: dict[str, Any]) -> None:
+            await queue.put({"name": name, "data": data})
+
+        async def _runner() -> None:
+            token = set_sink(sink)
+            try:
+                try:
+                    await retry_variant_half(
+                        request_id=request_id,
+                        user_id=user_id,
+                        label=label,
+                        target=target,
+                        brief_findings=findings_for_tools,
+                        user_direction=user_direction,
+                        content_store=content_store,
+                        image_store=image_store,
+                        existing_description=existing_description,
+                        existing_image_key=existing_image_key,
+                        existing_image_url=existing_image_url,
+                        existing_description_status=existing_description_status,
+                        existing_image_status=existing_image_status,
+                        source_suggestion_id=source_suggestion_id,
+                        regenerations_used=regenerations_used,
+                    )
+                except Exception:
+                    log.exception("retry-half failed")
+            finally:
+                reset_sink(token)
+                await inflight.release(brief_id)
+                await queue.put(None)
+
+        task = asyncio.create_task(_runner())
+
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                name = item["name"]
+                data = item["data"]
+                now = datetime.now(UTC)
+                try:
+                    if name == "content_variant_progress":
+                        yield _emit(
+                            ContentVariantProgress(
+                                conversation_id=conversation_id,
+                                at=now,
+                                request_id=request_id,
+                                variant_label=data.get("variant_label", label),
+                                step=data.get("step", ""),
+                                progress_hint=data.get("progress_hint"),
+                            )
+                        )
+                    elif name == "content_variant_ready":
+                        yield _emit(
+                            ContentVariantReady(
+                                conversation_id=conversation_id,
+                                at=now,
+                                request_id=request_id,
+                                variant=data.get("variant"),  # type: ignore[arg-type]
+                            )
+                        )
+                    elif name == "content_variant_partial":
+                        yield _emit(
+                            ContentVariantPartial(
+                                conversation_id=conversation_id,
+                                at=now,
+                                request_id=request_id,
+                                variant_label=data.get("variant_label", label),
+                                description_status=data.get(
+                                    "description_status", "pending"
+                                ),
+                                image_status=data.get("image_status", "pending"),
+                                description=data.get("description"),
+                                image_signed_url=data.get("image_signed_url"),
+                                retry_target=data.get("retry_target", "image"),
+                            )
+                        )
+                except Exception:
+                    log.exception(
+                        "failed to emit retry-half sse frame name=%s", name
+                    )
+
+            with contextlib.suppress(Exception):
+                await task
+
+            yield _emit(
+                Done(
+                    conversation_id=conversation_id,
+                    at=datetime.now(UTC),
+                    final_status="brief_ready",
+                    summary=f"retry-half variant {label} {target} complete",
+                )
+            )
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        sse_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 

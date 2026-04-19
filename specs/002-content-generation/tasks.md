@@ -132,9 +132,9 @@ description: "Task list for 002-content-generation"
 
 ### Implementation for User Story 3
 
-- [ ] T051 [US3] Add `copy description` action using `navigator.clipboard.writeText` on `<VariantCard />`, in apps/web/components/ephemeral/variant-card.tsx
-- [ ] T052 [US3] Add `download image` action that fetches the signed URL (refreshing via `GET /api/v1/content/image/{image_key}` on 403) and triggers a browser download with `<a download>`, in apps/web/components/ephemeral/variant-card.tsx
-- [ ] T053 [US3] Ensure `image_store` PUT sets `Content-Disposition: attachment; filename=variant-{label}-{request_id}.png` on signed URLs (or maps via response-content-disposition override), in apps/api/services/image_store.py
+- [X] T051 [US3] Add `copy description` action using `navigator.clipboard.writeText` on `<VariantCard />`, in apps/web/components/ephemeral/variant-card.tsx
+- [X] T052 [US3] Add `download image` action that fetches the signed URL (refreshing via `GET /api/v1/content/image/{image_key}` on 403) and triggers a browser download with `<a download>`, in apps/web/components/ephemeral/variant-card.tsx
+- [X] T053 [US3] Ensure `image_store` PUT sets `Content-Disposition: attachment; filename=variant-{label}-{request_id}.png` on signed URLs (or maps via response-content-disposition override), in apps/api/services/image_store.py
 
 **Checkpoint**: All three user stories independently functional.
 
@@ -148,11 +148,11 @@ description: "Task list for 002-content-generation"
 - [ ] T055 [P] Integration test: image-half failure emits `content_variant_partial` with `retry_target: "image"` and the retry-half endpoint recovers it without bumping `regenerations_used`, in apps/api/tests/integration/test_partial_failure.py
 - [ ] T056 [P] Integration test: provider safety block emits `error` event with `recoverable: true`, `code: "content_safety_blocked"`, no variant rendered, in apps/api/tests/integration/test_safety_block.py
 - [ ] T057 [P] Integration test: whole-run 180s timeout emits terminal `error` with `recoverable: false`, `code: "content_gen_timeout"`, and releases the in-flight lock, in apps/api/tests/integration/test_run_timeout.py
-- [ ] T058 Implement `POST /api/v1/content/{request_id}/retry-half` dispatching only the failing half (description OR image) without counter increment, in apps/api/routers/content.py (depends on T029)
-- [ ] T059 Implement partial-failure path in `produce_variant`: on half-failure, emit `content_variant_partial` with `retry_target`, persist `description_status`/`image_status`, do NOT mark the variant failed, in apps/api/workers/content_tasks.py
-- [ ] T060 Implement provider-safety detection (Anthropic `stop_reason: "refusal"`, Google safety categories) in tools and surface `error` event with `code: "content_safety_blocked"`, in apps/api/tools/generate_copy.py and apps/api/tools/generate_image.py
-- [ ] T061 Implement whole-run timeout (180s wall-clock) in `ContentGenerationAgent`: emit terminal `error` with `code: "content_gen_timeout"`, release in-flight lock, write `FailureRecord`, in apps/api/agents/content_generation.py (depends on T030, T013)
-- [ ] T062 Implement targeted retry UI: when a `<VariantCard />` has `description_status == "failed"` or `image_status == "failed"`, render a small "Retry image/description" button that calls `/retry-half`, in apps/web/components/ephemeral/variant-card.tsx
+- [X] T058 Implement `POST /api/v1/content/{request_id}/retry-half` dispatching only the failing half (description OR image) without counter increment, in apps/api/routers/content.py (depends on T029)
+- [X] T059 Implement partial-failure path in `produce_variant`: on half-failure, emit `content_variant_partial` with `retry_target`, persist `description_status`/`image_status`, do NOT mark the variant failed, in apps/api/workers/content_tasks.py
+- [X] T060 Implement provider-safety detection (Anthropic `stop_reason: "refusal"`, Google safety categories) in tools and surface `error` event with `code: "content_safety_blocked"`, in apps/api/tools/generate_copy.py and apps/api/tools/generate_image.py
+- [X] T061 Implement whole-run timeout (180s wall-clock) in `ContentGenerationAgent`: emit terminal `error` with `code: "content_gen_timeout"`, release in-flight lock, write `FailureRecord`, in apps/api/agents/content_generation.py (depends on T030, T013)
+- [X] T062 Implement targeted retry UI: when a `<VariantCard />` has `description_status == "failed"` or `image_status == "failed"`, render a small "Retry image/description" button that calls `/retry-half`, in apps/web/components/ephemeral/variant-card.tsx
 
 ---
 

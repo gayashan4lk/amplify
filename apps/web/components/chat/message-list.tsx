@@ -46,6 +46,46 @@ export default function MessageList() {
 		Record<string, VariantLabel | null>
 	>({})
 
+	const [retryingByRequest, setRetryingByRequest] = useState<
+		Record<string, Partial<Record<VariantLabel, 'description' | 'image' | null>>>
+	>({})
+
+	async function handleRetryHalf(
+		requestId: string,
+		args: { label: VariantLabel; target: 'description' | 'image' },
+	) {
+		const { label, target } = args
+		setRetryingByRequest((prev) => ({
+			...prev,
+			[requestId]: { ...(prev[requestId] ?? {}), [label]: target },
+		}))
+		try {
+			const resp = await fetch(`/api/v1/content/${requestId}/retry-half`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ label, target }),
+			})
+			if (!resp.ok) return
+			const data = (await resp.json()) as { sse_endpoint: string }
+			const client = new SseClient({
+				url: data.sse_endpoint,
+				onEvent: (id, ev: SseEvent) => applyEvent(id, ev),
+				onClose: () =>
+					setRetryingByRequest((prev) => ({
+						...prev,
+						[requestId]: { ...(prev[requestId] ?? {}), [label]: null },
+					})),
+			})
+			client.start()
+		} catch {
+			setRetryingByRequest((prev) => ({
+				...prev,
+				[requestId]: { ...(prev[requestId] ?? {}), [label]: null },
+			}))
+		}
+	}
+
 	async function handleRegenerate(
 		requestId: string,
 		args: { label: VariantLabel; additionalGuidance: string },
@@ -159,6 +199,8 @@ export default function MessageList() {
 									regenerationCaps={m.regeneration_caps}
 									regeneratingLabel={regeneratingByRequest[m.request_id] ?? null}
 									onRegenerate={(args) => handleRegenerate(m.request_id, args)}
+									retryingByLabel={retryingByRequest[m.request_id] ?? {}}
+									onRetryHalf={(args) => handleRetryHalf(m.request_id, args)}
 								/>
 							</li>
 						)

@@ -156,6 +156,7 @@ async def generate_copy(
     user_direction: str,
     variant_label: str,
     additional_guidance: str | None = None,
+    request_id: str | None = None,
 ) -> CopyResult:
     """Produce a single Facebook-post description via Haiku.
 
@@ -215,11 +216,16 @@ async def generate_copy(
 
     latency_ms = int((time.monotonic() - t0) * 1000)
     log.info(
-        "generate_copy ok variant=%s length=%s repaired=%s latency_ms=%s",
-        variant_label,
-        len(text),
-        repaired,
-        latency_ms,
+        "generate_copy ok",
+        extra={
+            "step": "generate_copy",
+            "request_id": request_id,
+            "variant_label": variant_label,
+            "copy_length": len(text),
+            "repaired": repaired,
+            "latency_ms": latency_ms,
+            "model": "claude-haiku",
+        },
     )
     return CopyResult(text=text, latency_ms=latency_ms, repaired=repaired)
 
