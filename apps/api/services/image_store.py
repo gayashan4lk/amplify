@@ -106,5 +106,17 @@ def build_image_store() -> ImageStore:
     import boto3  # type: ignore[import-untyped]
 
     settings = get_settings()
-    client = boto3.client("s3", region_name=settings.image_store_region)
+    if not settings.image_store_access_key_id or not settings.image_store_secret_access_key:
+        raise RuntimeError(
+            "Image store credentials are not configured. Set "
+            "IMAGE_STORE_ACCESS_KEY_ID and IMAGE_STORE_SECRET_ACCESS_KEY in apps/api/.env."
+        )
+    client_kwargs: dict[str, Any] = {
+        "region_name": settings.image_store_region,
+        "aws_access_key_id": settings.image_store_access_key_id,
+        "aws_secret_access_key": settings.image_store_secret_access_key,
+    }
+    if settings.image_store_endpoint_url:
+        client_kwargs["endpoint_url"] = settings.image_store_endpoint_url
+    client = boto3.client("s3", **client_kwargs)
     return ImageStore(client, bucket=settings.image_store_bucket)

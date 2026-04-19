@@ -274,12 +274,22 @@ async def stream_content(
                             )
                         )
                     elif name == "ephemeral_ui":
+                        component_type = data.get("component_type")
+                        # The variants grid must not share the suggestions'
+                        # message id — otherwise chat-store's id-based dedupe
+                        # treats the grid as a duplicate of the suggestions
+                        # card and the variants never render.
+                        ephemeral_message_id = (
+                            f"msg_variants_{request_id}"
+                            if component_type == "content_variant_grid"
+                            else message_id
+                        )
                         yield _emit(
                             EphemeralUI(
                                 conversation_id=existing.conversation_id,
                                 at=now,
-                                message_id=message_id,
-                                component_type=data.get("component_type"),  # type: ignore[arg-type]
+                                message_id=ephemeral_message_id,
+                                component_type=component_type,  # type: ignore[arg-type]
                                 component=data.get("component", {}),
                             )
                         )

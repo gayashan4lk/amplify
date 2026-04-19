@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     content_gen_enabled: bool = Field(False, alias="CONTENT_GEN_ENABLED")
     image_store_bucket: str = Field(..., alias="IMAGE_STORE_BUCKET")
     image_store_region: str = Field(..., alias="IMAGE_STORE_REGION")
+    image_store_access_key_id: str | None = Field(default=None, alias="IMAGE_STORE_ACCESS_KEY_ID")
+    image_store_secret_access_key: str | None = Field(
+        default=None, alias="IMAGE_STORE_SECRET_ACCESS_KEY"
+    )
+    image_store_endpoint_url: str | None = Field(default=None, alias="IMAGE_STORE_ENDPOINT_URL")
 
     # Observability
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
