@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from middleware.auth import UserIdMiddleware
 from routers import chat as chat_router
+from routers import content as content_router
 from routers import conversations as conv_router
 
 logging.basicConfig(
@@ -51,6 +52,8 @@ app.add_middleware(UserIdMiddleware)
 
 app.include_router(chat_router.router)
 app.include_router(conv_router.router)
+app.include_router(content_router.router)
+app.include_router(content_router.briefs_router)
 
 
 @app.get("/health")

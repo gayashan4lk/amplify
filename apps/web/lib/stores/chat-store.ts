@@ -8,6 +8,13 @@
 
 import { create } from 'zustand'
 
+import type {
+	ContentSuggestionsListPayload,
+	ContentVariantGridPayload,
+	PostSuggestion,
+	PostVariant,
+	VariantLabel,
+} from '@/lib/schemas/content'
 import type { IntelligenceBrief, SseEvent } from '@/lib/types/sse-events'
 
 export type AgentName = 'supervisor' | 'research' | 'clarification'
@@ -30,6 +37,22 @@ export type StoredMessage =
 			prompt: string
 			options: string[]
 			answered: boolean
+	  }
+	| {
+			kind: 'assistant_content_suggestions'
+			id: string
+			request_id: string
+			question: string
+			suggestions: PostSuggestion[]
+	  }
+	| {
+			kind: 'assistant_content_variants'
+			id: string
+			request_id: string
+			variants: PostVariant[]
+			diversity_warning: boolean
+			regeneration_caps: Partial<Record<VariantLabel, number>>
+			progress: Partial<Record<VariantLabel, { step: string; progress_hint?: number | null }>>
 	  }
 	| {
 			kind: 'failure'
@@ -193,6 +216,56 @@ export const useChatStore = create<ChatState>((set, get) => ({
 						stream: { ...state.stream, activityEntries: [] },
 						seenEventIds: seen,
 					})
+				} else if (ev.component_type === 'content_suggestions') {
+					const payload = ev.component as ContentSuggestionsListPayload
+					const alreadyPresent = state.messages.some((m) => m.id === ev.message_id)
+					const flushed = flushActivityLog(
+						state.messages,
+						state.stream.activityEntries,
+						ev.message_id,
+					)
+					set({
+						messages: alreadyPresent
+							? flushed
+							: [
+									...flushed,
+									{
+										kind: 'assistant_content_suggestions',
+										id: ev.message_id,
+										request_id: payload.request_id,
+										question: payload.question,
+										suggestions: payload.suggestions,
+									},
+								],
+						stream: { ...state.stream, activityEntries: [] },
+						seenEventIds: seen,
+					})
+				} else if (ev.component_type === 'content_variant_grid') {
+					const payload = ev.component as ContentVariantGridPayload
+					const alreadyPresent = state.messages.some((m) => m.id === ev.message_id)
+					const flushed = flushActivityLog(
+						state.messages,
+						state.stream.activityEntries,
+						ev.message_id,
+					)
+					set({
+						messages: alreadyPresent
+							? flushed
+							: [
+									...flushed,
+									{
+										kind: 'assistant_content_variants',
+										id: ev.message_id,
+										request_id: payload.request_id,
+										variants: payload.variants,
+										diversity_warning: payload.diversity_warning,
+										regeneration_caps: payload.regeneration_caps ?? {},
+										progress: {},
+									},
+								],
+						stream: { ...state.stream, activityEntries: [] },
+						seenEventIds: seen,
+					})
 				} else if (ev.component_type === 'clarification_poll') {
 					const component = ev.component as {
 						research_request_id: string
@@ -233,6 +306,98 @@ export const useChatStore = create<ChatState>((set, get) => ({
 						})
 					}
 				}
+				return
+			}
+			case 'content_suggestions': {
+				const alreadyPresent = state.messages.some((m) => m.id === ev.message_id)
+				const flushed = flushActivityLog(
+					state.messages,
+					state.stream.activityEntries,
+					ev.message_id,
+				)
+				set({
+					messages: alreadyPresent
+						? flushed
+						: [
+								...flushed,
+								{
+									kind: 'assistant_content_suggestions',
+									id: ev.message_id,
+									request_id: ev.request_id,
+									question: ev.question,
+									suggestions: ev.suggestions,
+								},
+							],
+					stream: { ...state.stream, activityEntries: [] },
+					seenEventIds: seen,
+				})
+				return
+			}
+			case 'content_variant_progress': {
+				const messages = state.messages.map((m) =>
+					m.kind === 'assistant_content_variants' && m.request_id === ev.request_id
+						? {
+								...m,
+								progress: {
+									...m.progress,
+									[ev.variant_label]: {
+										step: ev.step,
+										progress_hint: ev.progress_hint ?? null,
+									},
+								},
+							}
+						: m,
+				)
+				set({ messages, seenEventIds: seen })
+				return
+			}
+			case 'content_variant_ready': {
+				const messages = state.messages.map((m) => {
+					if (
+						m.kind !== 'assistant_content_variants' ||
+						m.request_id !== ev.request_id
+					) {
+						return m
+					}
+					const others = m.variants.filter((v) => v.label !== ev.variant.label)
+					const progress = { ...m.progress }
+					delete progress[ev.variant.label]
+					return {
+						...m,
+						variants: [...others, ev.variant],
+						progress,
+					}
+				})
+				set({ messages, seenEventIds: seen })
+				return
+			}
+			case 'content_variant_partial': {
+				const messages = state.messages.map((m) => {
+					if (
+						m.kind !== 'assistant_content_variants' ||
+						m.request_id !== ev.request_id
+					) {
+						return m
+					}
+					const others = m.variants.filter((v) => v.label !== ev.variant_label)
+					const existing = m.variants.find((v) => v.label === ev.variant_label)
+					const merged: PostVariant = {
+						label: ev.variant_label,
+						description: ev.description ?? existing?.description ?? '',
+						description_status: ev.description_status,
+						image_key: existing?.image_key ?? null,
+						image_signed_url: ev.image_signed_url ?? existing?.image_signed_url ?? null,
+						image_width: 1080,
+						image_height: 1080,
+						image_status: ev.image_status,
+						regenerations_used: existing?.regenerations_used ?? 0,
+						source_suggestion_id: existing?.source_suggestion_id ?? null,
+						generation_trace_id: existing?.generation_trace_id ?? '',
+						updated_at: existing?.updated_at ?? new Date().toISOString(),
+					}
+					return { ...m, variants: [...others, merged] }
+				})
+				set({ messages, seenEventIds: seen })
 				return
 			}
 			case 'error': {

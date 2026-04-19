@@ -76,6 +76,10 @@ export class SseClient {
 			'tool_result',
 			'text_delta',
 			'ephemeral_ui',
+			'content_suggestions',
+			'content_variant_progress',
+			'content_variant_ready',
+			'content_variant_partial',
 			'error',
 			'done',
 		]) {
