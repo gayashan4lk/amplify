@@ -13,21 +13,10 @@ so the service is provider-agnostic.
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
 from config import get_settings
-
-_SIGN_TTL_SECONDS = 3600  # 1h signed URLs
-_CACHE_SAFETY_MARGIN = 60  # refresh signed URLs 60s before expiry
-
-
-@dataclass
-class _SignedEntry:
-    url: str
-    expires_at: float
 
 
 def _extension_for(content_type: str) -> str:
@@ -45,18 +34,27 @@ def _extension_for(content_type: str) -> str:
 class ImageStore:
     """Thin wrapper over an S3-compatible client."""
 
-    def __init__(self, s3_client: Any, *, bucket: str) -> None:
+    def __init__(
+        self,
+        s3_client: Any,
+        *,
+        bucket: str,
+        region: str,
+        endpoint_url: str | None = None,
+    ) -> None:
         self._s3 = s3_client
         self._bucket = bucket
-        self._cache: dict[str, _SignedEntry] = {}
+        self._region = region
+        self._endpoint_url = endpoint_url
 
     async def put(
         self, data: bytes, content_type: str, *, filename: str | None = None
     ) -> tuple[str, str]:
-        """Upload `data` and return `(key, signed_url)`.
+        """Upload `data` and return `(key, public_url)`.
 
         `filename` is set as the response `Content-Disposition` so downloads
-        from the signed URL land with a predictable name (FR for T053).
+        land with a predictable name (FR for T053). The bucket is configured
+        for public read access, so we return a plain public URL.
         """
 
         ext = _extension_for(content_type)
@@ -76,17 +74,10 @@ class ImageStore:
         return key, self.sign(key)
 
     def sign(self, key: str) -> str:
-        now = time.time()
-        cached = self._cache.get(key)
-        if cached and cached.expires_at - _CACHE_SAFETY_MARGIN > now:
-            return cached.url
-        url = self._s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": self._bucket, "Key": key},
-            ExpiresIn=_SIGN_TTL_SECONDS,
-        )
-        self._cache[key] = _SignedEntry(url=url, expires_at=now + _SIGN_TTL_SECONDS)
-        return url
+        if self._endpoint_url:
+            base = self._endpoint_url.rstrip("/")
+            return f"{base}/{self._bucket}/{key}"
+        return f"https://{self._bucket}.s3.{self._region}.amazonaws.com/{key}"
 
 
 async def _maybe_await(fn: Any, /, *args: Any, **kwargs: Any) -> Any:
@@ -119,4 +110,9 @@ def build_image_store() -> ImageStore:
     if settings.image_store_endpoint_url:
         client_kwargs["endpoint_url"] = settings.image_store_endpoint_url
     client = boto3.client("s3", **client_kwargs)
-    return ImageStore(client, bucket=settings.image_store_bucket)
+    return ImageStore(
+        client,
+        bucket=settings.image_store_bucket,
+        region=settings.image_store_region,
+        endpoint_url=settings.image_store_endpoint_url,
+    )
