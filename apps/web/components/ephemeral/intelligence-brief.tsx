@@ -10,7 +10,10 @@
 import { useState } from 'react'
 
 import { TraceLink } from '@/components/dev/trace-link'
-import type { IntelligenceBrief } from '@/lib/types/sse-events'
+import { Button } from '@/components/ui/button'
+import { SseClient } from '@/lib/sse-client'
+import { useChatStore } from '@/lib/stores/chat-store'
+import type { IntelligenceBrief, SseEvent } from '@/lib/types/sse-events'
 
 type Props = { brief: IntelligenceBrief }
 
@@ -59,6 +62,70 @@ export default function IntelligenceBriefComponent({ brief }: Props) {
 					<FindingCard key={f.id} finding={f} traceId={brief.trace_id ?? null} />
 				))}
 			</ol>
+
+			<div className="mt-4 border-t pt-4">
+				<GenerateContentButton brief={brief} />
+			</div>
+		</div>
+	)
+}
+
+function GenerateContentButton({ brief }: { brief: IntelligenceBrief }) {
+	const [pending, setPending] = useState(false)
+	const [started, setStarted] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const applyEvent = useChatStore((s) => s.applyEvent)
+
+	const disabled =
+		pending || started || brief.findings.length === 0 || !brief.conversation_id
+
+	async function onClick() {
+		if (disabled) return
+		setPending(true)
+		setError(null)
+		try {
+			const res = await fetch('/api/content/generate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					brief_id: brief.id,
+					conversation_id: brief.conversation_id,
+				}),
+			})
+			const data = await res.json().catch(() => ({}))
+			if (!res.ok && res.status !== 202) {
+				setError(data?.error?.message ?? data?.detail ?? `Failed (${res.status})`)
+				return
+			}
+			const requestId: string | undefined = data?.request_id
+			if (!requestId) {
+				setError('No request id returned')
+				return
+			}
+			setStarted(true)
+			const client = new SseClient({
+				url: `/api/content/stream?request_id=${encodeURIComponent(requestId)}`,
+				onEvent: (id, ev: SseEvent) => applyEvent(id, ev),
+			})
+			client.start()
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Network error')
+		} finally {
+			setPending(false)
+		}
+	}
+
+	return (
+		<div className="flex items-center gap-3">
+			<Button type="button" onClick={onClick} disabled={disabled}>
+				{started ? 'Generating…' : pending ? 'Starting…' : 'Generate Facebook content'}
+			</Button>
+			{brief.findings.length === 0 && (
+				<span className="text-xs text-muted-foreground">
+					Brief has no findings yet
+				</span>
+			)}
+			{error && <span className="text-xs text-red-600">{error}</span>}
 		</div>
 	)
 }

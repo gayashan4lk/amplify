@@ -58,3 +58,21 @@ class BriefStore:
     async def list_for_user(self, *, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
         cursor = self._coll.find({"user_id": user_id}).sort("generated_at", -1).limit(limit)
         return [d async for d in cursor]
+
+    async def append_generation_request(
+        self, *, brief_id: str, user_id: str, request_id: str
+    ) -> None:
+        """Append a content-generation request id to the brief's back-reference
+        list (T035). Read-only from the brief's perspective — the briefs
+        themselves remain owned by Stage 1; this is purely a rehydration
+        pointer for the content-generation stage.
+        """
+
+        try:
+            oid = ObjectId(brief_id)
+        except Exception:
+            return
+        await self._coll.update_one(
+            {"_id": oid, "user_id": user_id},
+            {"$addToSet": {"generation_request_ids": request_id}},
+        )

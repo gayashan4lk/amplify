@@ -8,6 +8,8 @@ import remarkGfm from 'remark-gfm'
 
 import StreamRenderer from '@/components/chat/stream-renderer'
 import ClarificationPoll from '@/components/ephemeral/clarification-poll'
+import ContentSuggestionsList from '@/components/ephemeral/content-suggestions'
+import ContentVariantGrid from '@/components/ephemeral/content-variant-grid'
 import IntelligenceBrief from '@/components/ephemeral/intelligence-brief'
 import FailureCard from '@/components/chat/failure-card'
 import { useChatStore } from '@/lib/stores/chat-store'
@@ -90,6 +92,27 @@ export default function MessageList() {
 									prompt={m.prompt}
 									options={m.options}
 									answered={m.answered}
+								/>
+							</li>
+						)
+					case 'assistant_content_suggestions':
+						return (
+							<li key={m.id} className="self-stretch">
+								<ContentSuggestionsList
+									requestId={m.request_id}
+									question={m.question}
+									suggestions={m.suggestions}
+								/>
+							</li>
+						)
+					case 'assistant_content_variants':
+						return (
+							<li key={m.id} className="self-stretch">
+								<ContentVariantGrid
+									requestId={m.request_id}
+									variants={m.variants}
+									diversityWarning={m.diversity_warning}
+									progress={m.progress}
 								/>
 							</li>
 						)

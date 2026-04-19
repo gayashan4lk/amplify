@@ -68,28 +68,28 @@ description: "Task list for 002-content-generation"
 - [ ] T019 [P] [US1] Contract test for `GET /api/v1/content/{request_id}` and `GET /api/v1/briefs/{brief_id}/content-requests` rehydration in apps/api/tests/contract/test_content_rehydrate.py
 - [ ] T020 [P] [US1] Contract test for SSE subtypes ordering (`content_suggestions` → `content_variant_progress` → `content_variant_ready`) and envelope shape in apps/api/tests/contract/test_content_sse.py
 - [ ] T021 [P] [US1] Contract test for `ContentGenerationRequest` schema (status machine, variant length bounds, suggestion bounds, schema_version) in apps/api/tests/contract/test_content_schema.py
-- [ ] T022 [P] [US1] Unit test for variant diversity checker (embedding-cosine > 0.9 triggers one retry, emits `diversity_warning` when still too similar) in apps/api/tests/unit/test_variant_diversity.py
-- [ ] T023 [P] [US1] Unit test for copy-length repair (out-of-band → silent repair → truncate/pad branch) in apps/api/tests/unit/test_copy_length.py
+- [X] T022 [P] [US1] Unit test for variant diversity checker (embedding-cosine > 0.9 triggers one retry, emits `diversity_warning` when still too similar) in apps/api/tests/unit/test_variant_diversity.py
+- [X] T023 [P] [US1] Unit test for copy-length repair (out-of-band → silent repair → truncate/pad branch) in apps/api/tests/unit/test_copy_length.py
 - [ ] T024 [P] [US1] Integration test for full flow with `respx`-mocked Anthropic + Nano Banana 2: trigger → suggestions → direction reply → two variants ready in apps/api/tests/integration/test_content_flow.py
 - [ ] T025 [P] [US1] Vitest component test for `<ContentVariantGrid />` rendering two labeled variants with progress states in apps/web/components/ephemeral/__tests__/content-variant-grid.test.tsx
 - [ ] T026 [P] [US1] Playwright E2E: click generate → suggestions render → reply → two variants render with correct dimensions and length bounds in apps/web/e2e/content-generation.spec.ts
 
 ### Implementation for User Story 1
 
-- [ ] T027 [P] [US1] Implement `generate_copy` tool wrapping Haiku through `llm_router`, with prompt enforcing 80–250 chars + ≥1 emoji from the conservative-render set, in apps/api/tools/generate_copy.py (depends on T012)
-- [ ] T028 [P] [US1] Implement `generate_image` tool wrapping Nano Banana 2 through `llm_router`, enforcing 1080×1080 (or letterbox), persisting bytes via `image_store.put`, returning `(image_key, signed_url)` in apps/api/tools/generate_image.py (depends on T010, T012)
-- [ ] T029 [US1] Implement ARQ worker tasks `produce_variant(request_id, label)` that run copy + image in parallel via `asyncio.gather`, persist partial progress, emit `content_variant_progress`/`partial`/`ready` events, in apps/api/workers/content_tasks.py (depends on T027, T028, T011, T008)
-- [ ] T030 [US1] Implement `ContentGenerationAgent` LangGraph node: suggestion step (Haiku with brief findings → 2–4 `PostSuggestion`), wait-for-user-direction via `resume_bus`, diversity gate, dispatch of two parallel `produce_variant` ARQ jobs, terminal completion, in apps/api/agents/content_generation.py (depends on T011, T012, T029)
-- [ ] T031 [US1] Wire Supervisor intent routing so a "generate content" intent (triggered by the REST endpoint) routes to `ContentGenerationAgent`, in apps/api/agents/supervisor.py and apps/api/agents/graph.py (depends on T030)
-- [ ] T032 [US1] Implement `POST /api/v1/content/generate`: brief-ownership + completeness check, in-flight-lock acquire, persist `ContentGenerationRequest` in `suggesting`, kick off graph run, return `{request_id, sse_endpoint}` (200) or `202 already_running`, in apps/api/routers/content.py (depends on T009, T011, T031)
-- [ ] T033 [US1] Implement `GET /api/v1/content/{request_id}` and `GET /api/v1/briefs/{brief_id}/content-requests` for chat rehydration, in apps/api/routers/content.py (depends on T011)
-- [ ] T034 [US1] Implement `GET /api/v1/content/image/{image_key}` signed-URL refresh endpoint, in apps/api/routers/content.py (depends on T010)
-- [ ] T035 [US1] Add read-only `generation_request_ids` back-reference append on the `intelligence_briefs` document whenever a new request is created, in apps/api/services/brief_store.py
-- [ ] T036 [P] [US1] Implement `<ContentSuggestionsList />` ephemeral component rendering 2–4 suggestions with finding-id pills and the consolidated question, in apps/web/components/ephemeral/content-suggestions.tsx (depends on T015)
-- [ ] T037 [P] [US1] Implement `<VariantCard />` rendering description, 1:1 image, per-half status badges (ready/pending/failed), and progress label, in apps/web/components/ephemeral/variant-card.tsx (depends on T015)
-- [ ] T038 [US1] Implement `<ContentVariantGrid />` composing two `<VariantCard />` side-by-side with diversity-warning banner, in apps/web/components/ephemeral/content-variant-grid.tsx (depends on T037)
-- [ ] T039 [US1] Add "Generate Facebook content" button to the rendered brief card that calls `POST /api/v1/content/generate` (disabled while a run is in-flight or the brief has no findings), in apps/web/components/chat/brief-card.tsx
-- [ ] T040 [US1] Add chat-load rehydration: fetch `/api/v1/briefs/{brief_id}/content-requests` for each rendered brief and re-emit `content_variant_grid` ephemeral events locally, in apps/web/components/chat/conversation-loader.tsx (depends on T033, T038)
+- [X] T027 [P] [US1] Implement `generate_copy` tool wrapping Haiku through `llm_router`, with prompt enforcing 80–250 chars + ≥1 emoji from the conservative-render set, in apps/api/tools/generate_copy.py (depends on T012)
+- [X] T028 [P] [US1] Implement `generate_image` tool wrapping Nano Banana 2 through `llm_router`, enforcing 1080×1080 (or letterbox), persisting bytes via `image_store.put`, returning `(image_key, signed_url)` in apps/api/tools/generate_image.py (depends on T010, T012)
+- [X] T029 [US1] Implement ARQ worker tasks `produce_variant(request_id, label)` that run copy + image in parallel via `asyncio.gather`, persist partial progress, emit `content_variant_progress`/`partial`/`ready` events, in apps/api/workers/content_tasks.py (depends on T027, T028, T011, T008)
+- [X] T030 [US1] Implement `ContentGenerationAgent` LangGraph node: suggestion step (Haiku with brief findings → 2–4 `PostSuggestion`), wait-for-user-direction via `resume_bus`, diversity gate, dispatch of two parallel `produce_variant` ARQ jobs, terminal completion, in apps/api/agents/content_generation.py (depends on T011, T012, T029)
+- [X] T031 [US1] Wire Supervisor intent routing so a "generate content" intent (triggered by the REST endpoint) routes to `ContentGenerationAgent`, in apps/api/agents/supervisor.py and apps/api/agents/graph.py (depends on T030)
+- [X] T032 [US1] Implement `POST /api/v1/content/generate`: brief-ownership + completeness check, in-flight-lock acquire, persist `ContentGenerationRequest` in `suggesting`, kick off graph run, return `{request_id, sse_endpoint}` (200) or `202 already_running`, in apps/api/routers/content.py (depends on T009, T011, T031)
+- [X] T033 [US1] Implement `GET /api/v1/content/{request_id}` and `GET /api/v1/briefs/{brief_id}/content-requests` for chat rehydration, in apps/api/routers/content.py (depends on T011)
+- [X] T034 [US1] Implement `GET /api/v1/content/image/{image_key}` signed-URL refresh endpoint, in apps/api/routers/content.py (depends on T010)
+- [X] T035 [US1] Add read-only `generation_request_ids` back-reference append on the `intelligence_briefs` document whenever a new request is created, in apps/api/services/brief_store.py
+- [X] T036 [P] [US1] Implement `<ContentSuggestionsList />` ephemeral component rendering 2–4 suggestions with finding-id pills and the consolidated question, in apps/web/components/ephemeral/content-suggestions.tsx (depends on T015)
+- [X] T037 [P] [US1] Implement `<VariantCard />` rendering description, 1:1 image, per-half status badges (ready/pending/failed), and progress label, in apps/web/components/ephemeral/variant-card.tsx (depends on T015)
+- [X] T038 [US1] Implement `<ContentVariantGrid />` composing two `<VariantCard />` side-by-side with diversity-warning banner, in apps/web/components/ephemeral/content-variant-grid.tsx (depends on T037)
+- [X] T039 [US1] Add "Generate Facebook content" button to the rendered brief card that calls `POST /api/v1/content/generate` (disabled while a run is in-flight or the brief has no findings), in apps/web/components/chat/brief-card.tsx
+- [X] T040 [US1] Add chat-load rehydration: fetch `/api/v1/briefs/{brief_id}/content-requests` for each rendered brief and re-emit `content_variant_grid` ephemeral events locally, in apps/web/components/chat/conversation-loader.tsx (depends on T033, T038)
 
 **Checkpoint**: User Story 1 is fully functional — two variants generated from a brief, streamed, and persisted across reloads.
 

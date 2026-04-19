@@ -53,6 +53,7 @@ app.add_middleware(UserIdMiddleware)
 app.include_router(chat_router.router)
 app.include_router(conv_router.router)
 app.include_router(content_router.router)
+app.include_router(content_router.briefs_router)
 
 
 @app.get("/health")

@@ -35,6 +35,12 @@ latest user message into ONE of four routes:
   finding 2", "can you expand on that competitor", "what sources back that?"). \
   In this case we MUST NOT re-run research; we answer using the stored brief.
 
+NOTE: When the user explicitly asks to "generate Facebook content", "generate \
+posts", "create post variants", or otherwise requests the Stage-2 content \
+generation flow, treat it as "followup_on_existing_brief" so the chat handler \
+can route them to the content-generation trigger. Content generation has its \
+own dedicated REST entry point — the supervisor never invokes it directly.
+
 Respond with a structured SupervisorDecision. Always set `explanation` to a \
 single short sentence."""
 
