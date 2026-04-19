@@ -24,7 +24,7 @@ ImagePurpose = Literal["content_image"]
 # Target dimensions for Facebook post imagery (FR-007). Letterbox on
 # downstream mismatch rather than failing the whole variant.
 CONTENT_IMAGE_SIZE: tuple[int, int] = (1080, 1080)
-CONTENT_IMAGE_MODEL = "gemini-nano-banana-2"
+CONTENT_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
 
 
 @cache
