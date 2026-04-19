@@ -15,6 +15,9 @@ class FailureCode(StrEnum):
     user_cancelled = "user_cancelled"
     budget_exceeded = "budget_exceeded"
     rate_limited_user = "rate_limited_user"
+    content_gen_blocked = "content_gen_blocked"
+    content_gen_timeout = "content_gen_timeout"
+    content_safety_blocked = "content_safety_blocked"
 
 
 class FailureRecord(BaseModel):

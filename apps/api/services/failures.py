@@ -24,6 +24,45 @@ log = logging.getLogger(__name__)
 _GENERIC = {"", "something went wrong", "an error occurred", "unknown error", "error"}
 
 
+async def record_content_failure(
+    *,
+    prisma: Any | None,
+    request_id: str,
+    code: FailureCode,
+    user_message: str,
+    suggested_action: str | None = None,
+    trace_id: str | None = None,
+    recoverable: bool | None = None,
+) -> FailureRecord:
+    """Helper for the Content Generation path (T013).
+
+    Builds a FailureRecord, persists it best-effort, and tags it with the
+    originating `request_id` so the rehydration endpoints can re-render the
+    terminal failure next to the brief."""
+
+    record = build_failure_record(
+        code=code,
+        user_message=user_message,
+        suggested_action=suggested_action,
+        trace_id=trace_id,
+        recoverable=recoverable,
+    )
+    if prisma is not None:
+        with contextlib.suppress(Exception):
+            await prisma.failurerecord.create(
+                data={
+                    "id": record.id,
+                    "code": record.code.value,
+                    "recoverable": record.recoverable,
+                    "userMessage": record.user_message,
+                    "suggestedAction": record.suggested_action,
+                    "traceId": record.trace_id,
+                    "contextRef": request_id,
+                }
+            )
+    return record
+
+
 def build_failure_record(
     *,
     code: FailureCode,
@@ -44,6 +83,8 @@ def build_failure_record(
             FailureCode.tavily_rate_limited,
             FailureCode.llm_unavailable,
             FailureCode.rate_limited_user,
+            FailureCode.content_gen_blocked,
+            FailureCode.content_safety_blocked,
         }
     return FailureRecord(
         id=f"fr_{uuid4().hex[:12]}",

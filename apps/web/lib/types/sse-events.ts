@@ -11,6 +11,15 @@
 
 import { z } from 'zod'
 
+import {
+	ContentSuggestionsListPayloadSchema,
+	ContentVariantGridPayloadSchema,
+	HalfStatusSchema,
+	PostSuggestionSchema,
+	PostVariantSchema,
+	VariantLabelSchema,
+} from '@/lib/schemas/content'
+
 const BaseEvent = z.object({
 	v: z.literal(1),
 	conversation_id: z.string(),
@@ -116,8 +125,46 @@ const TextDeltaSchema = BaseEvent.extend({
 const EphemeralUISchema = BaseEvent.extend({
 	type: z.literal('ephemeral_ui'),
 	message_id: z.string(),
-	component_type: z.enum(['intelligence_brief', 'clarification_poll']),
+	component_type: z.enum([
+		'intelligence_brief',
+		'clarification_poll',
+		'content_suggestions',
+		'content_variant_grid',
+	]),
 	component: z.unknown(),
+})
+
+const ContentSuggestionsEventSchema = BaseEvent.extend({
+	type: z.literal('content_suggestions'),
+	message_id: z.string(),
+	request_id: z.string(),
+	suggestions: z.array(PostSuggestionSchema).max(4),
+	question: z.string(),
+})
+
+const ContentVariantProgressSchema = BaseEvent.extend({
+	type: z.literal('content_variant_progress'),
+	request_id: z.string(),
+	variant_label: VariantLabelSchema,
+	step: z.string(),
+	progress_hint: z.number().min(0).max(1).nullable().optional(),
+})
+
+const ContentVariantReadySchema = BaseEvent.extend({
+	type: z.literal('content_variant_ready'),
+	request_id: z.string(),
+	variant: PostVariantSchema,
+})
+
+const ContentVariantPartialSchema = BaseEvent.extend({
+	type: z.literal('content_variant_partial'),
+	request_id: z.string(),
+	variant_label: VariantLabelSchema,
+	description_status: HalfStatusSchema,
+	image_status: HalfStatusSchema,
+	description: z.string().nullable().optional(),
+	image_signed_url: z.string().nullable().optional(),
+	retry_target: z.enum(['description', 'image']),
 })
 
 const ErrorSchema = BaseEvent.extend({
@@ -131,6 +178,9 @@ const ErrorSchema = BaseEvent.extend({
 		'user_cancelled',
 		'budget_exceeded',
 		'rate_limited_user',
+		'content_gen_blocked',
+		'content_gen_timeout',
+		'content_safety_blocked',
 	]),
 	message: z.string().min(1),
 	recoverable: z.boolean(),
@@ -154,6 +204,10 @@ export const SseEventSchema = z.discriminatedUnion('type', [
 	ProgressSchema,
 	TextDeltaSchema,
 	EphemeralUISchema,
+	ContentSuggestionsEventSchema,
+	ContentVariantProgressSchema,
+	ContentVariantReadySchema,
+	ContentVariantPartialSchema,
 	ErrorSchema,
 	DoneSchema,
 ])

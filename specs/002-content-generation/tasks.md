@@ -37,18 +37,18 @@ description: "Task list for 002-content-generation"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T006 [P] Define Pydantic v2 models `ContentGenerationRequest`, `PostVariant`, `PostSuggestion`, status enums, and `schema_version=1` with validators (length 80–250, emoji-in-description check, regenerations_used cap, variants ≤2, suggestions 2–4) in apps/api/models/content.py
-- [ ] T007 [P] Extend `EphemeralComponent` union with `ContentVariantGrid` and `ContentSuggestionsList` payload models in apps/api/models/ephemeral.py
-- [ ] T008 [P] Add new SSE event subtypes `content_suggestions`, `content_variant_progress`, `content_variant_ready`, `content_variant_partial` with Pydantic payload models and typed envelope registration in apps/api/sse/events.py
-- [ ] T009 [P] Implement Redis in-flight lock service (`acquire(brief_id, ttl=180)`, `release(brief_id)`, `is_locked(brief_id)`) using `SET NX EX` on key `content_gen:inflight:{brief_id}` in apps/api/services/inflight_lock.py
-- [ ] T010 [P] Implement `image_store` service with `put(bytes, content_type) -> (key, signed_url)`, `sign(key) -> signed_url`, and TTL-aware cache in apps/api/services/image_store.py
-- [ ] T011 Implement `content_store` service with Motor CRUD for `content_generation_requests` (create, get, list_by_brief, list_by_conversation, update_status, upsert_variant, increment_regenerations_used) and create MongoDB indexes `{brief_id, started_at:-1}`, `{conversation_id, started_at:-1}`, `{user_id, status}` in apps/api/services/content_store.py (depends on T006)
-- [ ] T012 Extend `llm_router` with a `claude-haiku-4-5-20251001` text route and a `gemini` Nano Banana 2 image route (1080×1080 requested, letterbox fallback) in apps/api/services/llm_router.py (depends on T002)
-- [ ] T013 Add `content_gen_blocked` and `content_gen_timeout` failure codes plus helper for writing `FailureRecord` rows tied to a `request_id` in apps/api/services/failures.py
-- [ ] T014 Register the new `/api/v1/content` router in FastAPI app bootstrap in apps/api/main.py (depends on T004)
-- [ ] T015 [P] Extend Pydantic → Zod generator config and run it to produce apps/web/lib/schemas/content.ts from the new models (depends on T006, T007, T008)
-- [ ] T016 [P] Extend SSE client parsing to discriminate `content_suggestions` / `content_variant_progress` / `content_variant_ready` / `content_variant_partial` via `.safeParse` against generated Zod in apps/web/lib/sse-client.ts (depends on T015)
-- [ ] T017 [P] Extend `<StreamRenderer />` dispatcher to route content_* events and new `ephemeral_ui` component discriminators (`content_suggestions`, `content_variant_grid`) to the ephemeral UI layer in apps/web/components/chat/stream-renderer.tsx (depends on T016)
+- [X] T006 [P] Define Pydantic v2 models `ContentGenerationRequest`, `PostVariant`, `PostSuggestion`, status enums, and `schema_version=1` with validators (length 80–250, emoji-in-description check, regenerations_used cap, variants ≤2, suggestions 2–4) in apps/api/models/content.py
+- [X] T007 [P] Extend `EphemeralComponent` union with `ContentVariantGrid` and `ContentSuggestionsList` payload models in apps/api/models/ephemeral.py
+- [X] T008 [P] Add new SSE event subtypes `content_suggestions`, `content_variant_progress`, `content_variant_ready`, `content_variant_partial` with Pydantic payload models and typed envelope registration in apps/api/sse/events.py
+- [X] T009 [P] Implement Redis in-flight lock service (`acquire(brief_id, ttl=180)`, `release(brief_id)`, `is_locked(brief_id)`) using `SET NX EX` on key `content_gen:inflight:{brief_id}` in apps/api/services/inflight_lock.py
+- [X] T010 [P] Implement `image_store` service with `put(bytes, content_type) -> (key, signed_url)`, `sign(key) -> signed_url`, and TTL-aware cache in apps/api/services/image_store.py
+- [X] T011 Implement `content_store` service with Motor CRUD for `content_generation_requests` (create, get, list_by_brief, list_by_conversation, update_status, upsert_variant, increment_regenerations_used) and create MongoDB indexes `{brief_id, started_at:-1}`, `{conversation_id, started_at:-1}`, `{user_id, status}` in apps/api/services/content_store.py (depends on T006)
+- [X] T012 Extend `llm_router` with a `claude-haiku-4-5-20251001` text route and a `gemini` Nano Banana 2 image route (1080×1080 requested, letterbox fallback) in apps/api/services/llm_router.py (depends on T002)
+- [X] T013 Add `content_gen_blocked` and `content_gen_timeout` failure codes plus helper for writing `FailureRecord` rows tied to a `request_id` in apps/api/services/failures.py
+- [X] T014 Register the new `/api/v1/content` router in FastAPI app bootstrap in apps/api/main.py (depends on T004)
+- [X] T015 [P] Extend Pydantic → Zod generator config and run it to produce apps/web/lib/schemas/content.ts from the new models (depends on T006, T007, T008)
+- [X] T016 [P] Extend SSE client parsing to discriminate `content_suggestions` / `content_variant_progress` / `content_variant_ready` / `content_variant_partial` via `.safeParse` against generated Zod in apps/web/lib/sse-client.ts (depends on T015)
+- [X] T017 [P] Extend `<StreamRenderer />` dispatcher to route content_* events and new `ephemeral_ui` component discriminators (`content_suggestions`, `content_variant_grid`) to the ephemeral UI layer in apps/web/components/chat/stream-renderer.tsx (depends on T016)
 
 **Checkpoint**: Foundation ready — user story implementation can now begin in parallel.
 
